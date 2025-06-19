@@ -1,7 +1,7 @@
 [gd_scene load_steps=15 format=3 uid="uid://dt7fqvupclumi"]
 
 [ext_resource type="Script" uid="uid://qcmvhdm2w6ur" path="res://script/player.gd" id="1_onrkg"]
-[ext_resource type="PackedScene" uid="uid://dr8bb5ndvoihf" path="res://scene/attack_effect.tscn" id="2_fvtld"]
+[ext_resource type="PackedScene" uid="uid://bf4mqagq8ov0n" path="res://scene/AttackEffect.tscn" id="2_fvtld"]
 [ext_resource type="Texture2D" uid="uid://rcf4w2rpxjr0" path="res://character/hornet.png" id="2_i3pqv"]
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fvtld"]

@@ -1,0 +1,25 @@
+[gd_scene load_steps=4 format=3 uid="uid://bf4mqagq8ov0n"]
+
+[ext_resource type="Script" uid="uid://dwa4bdf3ot7ce" path="res://script/attack_effect.gd" id="1_6xrnq"]
+[ext_resource type="Texture2D" uid="uid://dlxl26uaj5ydh" path="res://character/attack.png" id="1_gnlvf"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_r5ds7"]
+
+[node name="AttackEffect" type="Area2D"]
+collision_layer = 8
+collision_mask = 4
+script = ExtResource("1_6xrnq")
+
+[node name="AttackVisual" type="Sprite2D" parent="."]
+texture_filter = 1
+texture_repeat = 1
+rotation = 3.14159
+texture = ExtResource("1_gnlvf")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_r5ds7")
+
+[node name="LifetimeTimer" type="Timer" parent="."]
+wait_time = 0.2
+one_shot = true
+autostart = true

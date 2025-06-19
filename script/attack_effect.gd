@@ -1,50 +1,52 @@
 extends Area2D
 
-# Signal emitted when this attack effect successfully hits an enemy.
-# It passes the enemy Node that was hit.
 signal hit_enemy(enemy_node: Node)
 
-# Reference to the actual visual Sprite2D (or AnimatedSprite2D) child node.
-# IMPORTANT: Make sure "$Sprite2D" matches the exact name of your visual sprite node
-# within the AttackEffect.tscn scene. If you renamed it (e.g., to "Visual"),
-# change this path to "$Visual".
-@onready var visual_sprite: Sprite2D = $Sprite2D
-
-# Reference to the Timer node that controls how long this attack effect lasts.
+@onready var visual_sprite: Sprite2D = $AttackVisual
 @onready var lifetime_timer: Timer = $LifetimeTimer
 
-func _ready():
-	# Connect the lifetime timer's timeout signal. When the timer runs out,
-	# this AttackEffect node will be removed from the scene tree.
-	lifetime_timer.timeout.connect(queue_free)
-	
-	# Connect the Area2D's body_entered signal. This signal is emitted when
-	# a physics body (like CharacterBody2D, RigidBody2D, etc.) enters this Area2D's collision shape.
-	body_entered.connect(_on_body_entered)
+var already_hit = false
+var pending_direction_x: float = 1.0  # Default facing right
 
-	# --- Debugging (Optional, remove after testing) ---
-	# print("AttackEffect spawned. Visual sprite path: ", visual_sprite.get_path() if visual_sprite else "NOT FOUND")
+func _ready():
+    lifetime_timer.timeout.connect(queue_free)
+    body_entered.connect(_on_body_entered)
+
+    if visual_sprite:
+        apply_attack_direction()
+    else:
+        push_error("❌ visual_sprite is NULL in _ready()")
 
 func _on_body_entered(body: Node):
-	# Check if the collided body belongs to the "enemy" group.
-	# Ensure your enemy nodes are added to the "enemy" group in their Node -> Groups tab.
-	if body.is_in_group("enemy"):
-		# Emit the signal, passing the enemy node that was hit.
-		# The player script will listen to this signal to deal damage and potentially bounce.
-		emit_signal("hit_enemy", body)
-		
-		# Immediately remove the attack effect from the scene after it hits something.
-		# This prevents it from hitting multiple times or lingering unnecessarily.
-		queue_free()
+    if already_hit:
+        return
+    if body.is_in_group("enemy"):
+        already_hit = true
+        emit_signal("hit_enemy", body)
+        queue_free()
 
-# This function is called by the Player script to set the visual direction of the attack.
-# direction_x will be 1.0 for right, -1.0 for left.
+# Called externally by player to tell which direction this attack faces
 func set_attack_direction(direction_x: float):
-	# Only attempt to flip if the visual_sprite node was successfully found.
-	if visual_sprite:
-		visual_sprite.flip_h = direction_x < 0
-		# --- Debugging (Optional, remove after testing) ---
-		# print("AttackEffect: set_attack_direction called. visual_sprite.flip_h set to: ", visual_sprite.flip_h)
-	else:
-		# If visual_sprite is null, it means the path in @onready var visual_sprite is incorrect.
-		push_error("AttackEffect: visual_sprite node was not found! Cannot flip.")
+    pending_direction_x = direction_x
+
+    if is_inside_tree() and visual_sprite:
+        apply_attack_direction()
+
+# Apply only rotation based on direction (no flipping)
+func apply_attack_direction():
+    if not visual_sprite:
+        push_error("❌ visual_sprite is NULL in apply_attack_direction()")
+        return
+
+    if pending_direction_x == 0.0:
+        # Down attack
+        visual_sprite.rotation_degrees = 90
+        print("🔽 Down attack: rotated to 90°")
+    elif pending_direction_x > 0.0:
+        # Right attack
+        visual_sprite.rotation_degrees = 0
+        print("➡ Right attack: rotated to 0°")
+    else:
+        # Left attack
+        visual_sprite.rotation_degrees = 180
+        print("⬅ Left attack: rotated to 180°")

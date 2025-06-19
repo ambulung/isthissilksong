@@ -1,0 +1,19 @@
+[gd_scene load_steps=4 format=3 uid="uid://clbhl5hsfher7"]
+
+[ext_resource type="Script" uid="uid://bbuwj1yurbgo7" path="res://script/take_damage.gd" id="1_f87vc"]
+[ext_resource type="Texture2D" uid="uid://bt5dfll5o5cog" path="res://icon.svg" id="2_8u16h"]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_b7koy"]
+
+[node name="Enemy" type="CharacterBody2D" groups=["enemy"]]
+collision_layer = 4
+collision_mask = 9
+script = ExtResource("1_f87vc")
+
+[node name="Sprite2D" type="Sprite2D" parent="." groups=["enemy"]]
+position = Vector2(1.19209e-07, -0.5)
+scale = Vector2(0.15625, 0.210938)
+texture = ExtResource("2_8u16h")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CapsuleShape2D_b7koy")

@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3 uid="uid://dt7fqvupclumi"]
+[gd_scene load_steps=16 format=3 uid="uid://dt7fqvupclumi"]
 
 [ext_resource type="Script" uid="uid://qcmvhdm2w6ur" path="res://script/player.gd" id="1_onrkg"]
 [ext_resource type="PackedScene" uid="uid://bf4mqagq8ov0n" path="res://scene/AttackEffect.tscn" id="2_fvtld"]
@@ -8,9 +8,13 @@
 atlas = ExtResource("2_i3pqv")
 region = Rect2(80, 0, 16, 24)
 
+[sub_resource type="AtlasTexture" id="AtlasTexture_s4jxa"]
+atlas = ExtResource("2_i3pqv")
+region = Rect2(0, 0, 16, 24)
+
 [sub_resource type="AtlasTexture" id="AtlasTexture_ct4mp"]
 atlas = ExtResource("2_i3pqv")
-region = Rect2(80, 0, 16, 24)
+region = Rect2(96, 0, 16, 24)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_hqtel"]
 atlas = ExtResource("2_i3pqv")
@@ -48,6 +52,14 @@ animations = [{
 }],
 "loop": false,
 "name": &"attack",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_s4jxa")
+}],
+"loop": false,
+"name": &"dodge",
 "speed": 5.0
 }, {
 "frames": [{
@@ -114,7 +126,7 @@ attack_sprite_scene = ExtResource("2_fvtld")
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
 texture_filter = 1
 sprite_frames = SubResource("SpriteFrames_nvl01")
-animation = &"down_attack"
+animation = &"dodge"
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 position = Vector2(0, 4)

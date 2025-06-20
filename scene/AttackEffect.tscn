@@ -11,6 +11,7 @@ collision_mask = 4
 script = ExtResource("1_6xrnq")
 
 [node name="AttackVisual" type="Sprite2D" parent="."]
+z_index = 10
 texture_filter = 1
 texture_repeat = 1
 rotation = 3.14159

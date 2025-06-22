@@ -1,0 +1,26 @@
+[gd_scene load_steps=4 format=3 uid="uid://bt7b2chu22gtm"]
+
+[ext_resource type="Texture2D" uid="uid://de4qp6xwyerql" path="res://character/blood_player.png" id="1_ar5fd"]
+[ext_resource type="Script" uid="uid://c7cfdf2r7ayni" path="res://script/self_distruct.gd" id="2_uma2q"]
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_lft5g"]
+particle_flag_disable_z = true
+angle_min = 180.0
+angle_max = 180.0
+radial_velocity_min = 4.99998
+radial_velocity_max = 229.89
+gravity = Vector3(0, 600, 0)
+damping_min = 10.0
+damping_max = 20.0
+scale_min = 0.1
+
+[node name="BloodEffect" type="GPUParticles2D"]
+z_index = 10
+texture_filter = 1
+amount = 30
+texture = ExtResource("1_ar5fd")
+explosiveness = 1.0
+randomness = 0.5
+fixed_fps = 60
+process_material = SubResource("ParticleProcessMaterial_lft5g")
+script = ExtResource("2_uma2q")

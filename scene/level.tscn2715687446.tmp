@@ -1,11 +1,9 @@
-[gd_scene load_steps=9 format=3 uid="uid://whbc8j1qjfn"]
+[gd_scene load_steps=7 format=3 uid="uid://whbc8j1qjfn"]
 
 [ext_resource type="PackedScene" uid="uid://dt7fqvupclumi" path="res://scene/player.tscn" id="1_dmi07"]
 [ext_resource type="Script" uid="uid://bt8cj7igdyuft" path="res://script/player_camera.gd" id="2_7g0b6"]
-[ext_resource type="PackedScene" uid="uid://bt7b2chu22gtm" path="res://scene/blood_effect_player.tscn" id="2_ismto"]
 [ext_resource type="Texture2D" uid="uid://g8qanjtbcy6u" path="res://tileset/ground.png" id="3_ukt71"]
 [ext_resource type="PackedScene" uid="uid://clbhl5hsfher7" path="res://scene/enemy.tscn" id="4_7g0b6"]
-[ext_resource type="PackedScene" uid="uid://c5038qhdsrim6" path="res://scene/blood_effect.tscn" id="5_ukt71"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_0b4ue"]
 texture = ExtResource("3_ukt71")
@@ -121,12 +119,12 @@ sources/0 = SubResource("TileSetAtlasSource_0b4ue")
 [node name="world" type="Node2D"]
 
 [node name="Player" parent="." groups=["player"] instance=ExtResource("1_dmi07")]
+process_mode = 3
 position = Vector2(-248, 88)
 attack_cooldown = 0.42
-hit_stop_duration = 0.1
-player_blood_effect_scene = ExtResource("2_ismto")
 
 [node name="PlayerCamera" type="Camera2D" parent="." groups=["camera"]]
+process_mode = 3
 offset = Vector2(0, -50)
 zoom = Vector2(3, 3)
 limit_smoothed = true
@@ -143,7 +141,6 @@ layer_0/tile_data = PackedInt32Array(-4, 524288, 0, 65532, 524288, 0, 131068, 52
 
 [node name="Enemy3" parent="." instance=ExtResource("4_7g0b6")]
 position = Vector2(0, 107)
-blood_effect_scene = ExtResource("5_ukt71")
 enemy_weight = 0.5
 
 [node name="foreup" type="Node2D" parent="."]

@@ -121,9 +121,6 @@ sources/0 = SubResource("TileSetAtlasSource_0b4ue")
 
 [node name="world" type="Node2D"]
 
-[node name="Player" parent="." groups=["player"] instance=ExtResource("1_dmi07")]
-position = Vector2(-333, 79)
-
 [node name="PlayerCamera" type="Camera2D" parent="." groups=["camera"]]
 offset = Vector2(0, -50)
 zoom = Vector2(3, 3)
@@ -156,3 +153,6 @@ alert_sound = ExtResource("5_ukt71")
 
 [node name="FlyingEnemy" parent="." instance=ExtResource("6_ismto")]
 position = Vector2(222, 8)
+
+[node name="Player" parent="." instance=ExtResource("1_dmi07")]
+position = Vector2(-371, 88)

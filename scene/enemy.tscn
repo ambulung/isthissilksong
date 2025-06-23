@@ -94,6 +94,7 @@ blood_effect_scene = ExtResource("2_yvcfn")
 one_shot_audio_scene = ExtResource("3_ulb22")
 hit_sound = ExtResource("3_8u16h")
 death_sound = ExtResource("3_8u16h")
+charge_duration = 0.2
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." groups=["enemy"]]
 texture_filter = 1

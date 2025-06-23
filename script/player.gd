@@ -1,4 +1,3 @@
-# Player.gd
 extends CharacterBody2D
 
 ################################################################################
@@ -19,6 +18,11 @@ extends CharacterBody2D
 @export_group("Jump Forgiveness")
 @export var COYOTE_TIME: float = 0.1   # Time after leaving ground to still jump (in seconds)
 @export var JUMP_BUFFER_TIME: float = 0.15 # Time before landing to pre-press jump (in seconds)
+
+@export_group("Grapple")
+@export var grapple_needle_scene: PackedScene # Assign your Needle.tscn here
+@export var GRAPPLE_PULL_SPEED: float = 450.0  # How fast the player is pulled to the anchor
+@export var GRAPPLE_MAX_DISTANCE: float = 600.0 # How far the needle can travel
 
 @export_group("Attack")
 @export var attack_sprite_scene: PackedScene # Reference to your AttackEffect.tscn
@@ -55,6 +59,7 @@ extends CharacterBody2D
 @onready var animated_sprite: AnimatedSprite2D = $AnimatedSprite2D
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
 @onready var attack_sound_player: AudioStreamPlayer2D = $AttackSoundPlayer
+@onready var grapple_rope: Line2D = $GrappleRope
 
 var coyote_timer: float = 0.0
 var jump_buffer_timer: float = 0.0
@@ -67,6 +72,12 @@ var current_health: int
 var is_invincible: bool = false
 var is_knocked_back: bool = false
 
+# Grapple State
+var is_grappling: bool = false
+var is_needle_out: bool = false
+var grapple_point: Vector2 = Vector2.ZERO
+var needle_instance: Node = null
+
 # Assuming Player is Layer 1, Enemy is Layer 3
 const PLAYER_LAYER = 1
 const ENEMY_LAYER = 3
@@ -76,59 +87,125 @@ const ENEMY_LAYER = 3
 ################################################################################
 
 func _ready():
-	add_to_group("player") # Good practice to add player to a group
+	add_to_group("player")
 	animated_sprite.animation_finished.connect(_on_animated_sprite_animation_finished)
 	current_health = MAX_HEALTH
+	grapple_rope.clear_points() # Ensure rope is not visible on start
 	print("Player initialized.")
 
 func _physics_process(delta: float):
-	velocity.y += GRAVITY * delta
-
-	if Input.is_action_just_pressed("dodge") and can_dodge and not is_dodging and not is_knocked_back:
-		perform_dodge()
-		return
-
-	if not is_dodging:
-		if is_knocked_back:
-			pass
+	# Handle grapple input first, as it can interrupt other states.
+	if Input.is_action_just_pressed("grapple"):
+		if is_grappling or is_needle_out:
+			_release_grapple()
 		else:
-			var input_direction_x = Input.get_axis("left", "right")
-			if input_direction_x != 0:
-				velocity.x = lerp(velocity.x, input_direction_x * SPEED, ACCELERATION * delta)
-				last_direction_x = input_direction_x
-			else:
-				velocity.x = lerp(velocity.x, 0.0, FRICTION * delta)
-
-			if is_on_floor():
-				coyote_timer = COYOTE_TIME
-			else:
-				coyote_timer -= delta
-
-			if Input.is_action_just_pressed("jump"):
-				jump_buffer_timer = JUMP_BUFFER_TIME
-			else:
-				jump_buffer_timer -= delta
-
-			if jump_buffer_timer > 0 and coyote_timer > 0:
-				velocity.y = JUMP_VELOCITY
-				coyote_timer = 0.0
-				jump_buffer_timer = 0.0
-
-			if Input.is_action_just_released("jump") and velocity.y < 0:
-				velocity.y *= JUMP_CUT_MULTIPLIER
-
-			if Input.is_action_just_pressed("attack") and can_attack and not is_in_attack_animation:
-				if Input.is_action_pressed("up"):
-					perform_up_attack()
-				elif not is_on_floor() and Input.is_action_pressed("down") and velocity.y >= 0:
-					perform_down_attack()
-				else:
-					perform_horizontal_attack()
+			_launch_needle()
+	
+	# If grappling, player is pulled towards the anchor point.
+	if is_grappling:
+		var direction_to_grapple = (grapple_point - global_position).normalized()
+		velocity = direction_to_grapple * GRAPPLE_PULL_SPEED
+		# Release grapple if we get very close to the destination
+		if global_position.distance_to(grapple_point) < 20.0:
+			_release_grapple()
+	# Otherwise, perform standard movement.
 	else:
-		velocity.x = last_direction_x * DODGE_SPEED
+		velocity.y += GRAVITY * delta
+
+		if Input.is_action_just_pressed("dodge") and can_dodge and not is_dodging and not is_knocked_back:
+			perform_dodge()
+			return # Exit early to prevent other movement logic this frame
+
+		if not is_dodging:
+			if is_knocked_back:
+				pass # Knockback velocity is handled in its own function
+			else:
+				var input_direction_x = Input.get_axis("left", "right")
+				if input_direction_x != 0:
+					velocity.x = lerp(velocity.x, input_direction_x * SPEED, ACCELERATION * delta)
+					last_direction_x = input_direction_x
+				else:
+					velocity.x = lerp(velocity.x, 0.0, FRICTION * delta)
+
+				if is_on_floor():
+					coyote_timer = COYOTE_TIME
+				else:
+					coyote_timer -= delta
+
+				if Input.is_action_just_pressed("jump"):
+					jump_buffer_timer = JUMP_BUFFER_TIME
+				else:
+					jump_buffer_timer -= delta
+
+				if jump_buffer_timer > 0 and coyote_timer > 0:
+					velocity.y = JUMP_VELOCITY
+					coyote_timer = 0.0
+					jump_buffer_timer = 0.0
+
+				if Input.is_action_just_released("jump") and velocity.y < 0:
+					velocity.y *= JUMP_CUT_MULTIPLIER
+
+				if Input.is_action_just_pressed("attack") and can_attack and not is_in_attack_animation:
+					if Input.is_action_pressed("up"):
+						perform_up_attack()
+					elif not is_on_floor() and Input.is_action_pressed("down") and velocity.y >= 0:
+						perform_down_attack()
+					else:
+						perform_horizontal_attack()
+		else:
+			# Dodge movement
+			velocity.x = last_direction_x * DODGE_SPEED
 
 	move_and_slide()
 	update_animations()
+	_update_grapple_rope()
+
+################################################################################
+#                                  GRAPPLE LOGIC                                #
+################################################################################
+
+func _launch_needle():
+	if not grapple_needle_scene or is_needle_out or is_dodging:
+		return
+		
+	is_needle_out = true
+	needle_instance = grapple_needle_scene.instantiate()
+	get_parent().add_child(needle_instance)
+	
+	# Connect to the needle's "stuck" signal
+	needle_instance.stuck.connect(_on_needle_stuck)
+	
+	# Launch the needle horizontally from the player's position
+	var direction = Vector2(last_direction_x, 0)
+	needle_instance.launch(global_position, direction, GRAPPLE_MAX_DISTANCE)
+
+func _on_needle_stuck(attach_position: Vector2):
+	# This function is called by the needle's signal when it hits a wall
+	grapple_point = attach_position
+	is_grappling = true
+	velocity.y = 0 # Stop falling to allow a clean pull
+
+func _release_grapple():
+	is_grappling = false
+	is_needle_out = false
+	grapple_rope.clear_points()
+	if is_instance_valid(needle_instance):
+		needle_instance.queue_free()
+	needle_instance = null
+	# Give a small upward boost on release if desired, or just reset Y velocity
+	if velocity.y > 0:
+		velocity.y = 0
+
+func _update_grapple_rope():
+	if is_needle_out and is_instance_valid(needle_instance):
+		grapple_rope.clear_points()
+		# Add a point at the player's center (local coordinates, so Vector2.ZERO)
+		grapple_rope.add_point(Vector2.ZERO)
+		# Add a point at the needle's position (converted to player's local coordinates)
+		grapple_rope.add_point(needle_instance.global_position - global_position)
+	else:
+		grapple_rope.clear_points()
+
 
 ################################################################################
 #                                  ATTACK LOGIC                                 #
@@ -148,7 +225,6 @@ func perform_horizontal_attack():
 	get_parent().add_child(attack_instance)
 	attack_instance.global_position = global_position + Vector2(last_direction_x * attack_offset_x, 0)
 	if attack_instance.has_method("set_attack_direction"):
-		## --- FIX --- ## Changed from call_deferred to a direct call
 		attack_instance.set_attack_direction(last_direction_x, "horizontal")
 	attack_instance.hit_enemy.connect(func(enemy_node): _on_attack_effect_hit_enemy(enemy_node, "horizontal"))
 	start_attack_cooldown()
@@ -163,7 +239,6 @@ func perform_down_attack():
 	get_parent().add_child(attack_instance)
 	attack_instance.global_position = global_position + Vector2(0, down_attack_offset_y)
 	if attack_instance.has_method("set_attack_direction"):
-		## --- FIX --- ## Changed from call_deferred to a direct call
 		attack_instance.set_attack_direction(last_direction_x, "down")
 	attack_instance.hit_enemy.connect(func(enemy_node): _on_attack_effect_hit_enemy(enemy_node, "down"))
 	start_attack_cooldown()
@@ -178,7 +253,6 @@ func perform_up_attack():
 	get_parent().add_child(attack_instance)
 	attack_instance.global_position = global_position + Vector2(0, up_attack_offset_y)
 	if attack_instance.has_method("set_attack_direction"):
-		## --- FIX --- ## Changed from call_deferred to a direct call
 		attack_instance.set_attack_direction(last_direction_x, "up")
 	attack_instance.hit_enemy.connect(func(enemy_node): _on_attack_effect_hit_enemy(enemy_node, "up"))
 	start_attack_cooldown()
@@ -187,29 +261,22 @@ func perform_up_attack():
 func start_attack_cooldown():
 	get_tree().create_timer(attack_cooldown).timeout.connect(func(): can_attack = true)
 
-## --- FIX --- ##
-# This is the primary fix. This function now correctly calls the take_damage method on the enemy.
 func _on_attack_effect_hit_enemy(enemy_node: Node, attack_type: String):
 	_trigger_hit_effects()
 	if enemy_node and enemy_node.has_method("take_damage"):
-		# Tell the enemy to take damage, providing the amount and player's position for knockback.
 		enemy_node.take_damage(attack_damage, global_position)
-		
-		# Handle player bounce AFTER dealing damage.
 		if attack_type == "down":
 			velocity.y = JUMP_VELOCITY * BOUNCE_VELOCITY_MULTIPLIER
 		elif attack_type == "up":
 			velocity.y = 0
-
-# ... (Rest of the Player script is identical and correct) ...
-# [All other functions like take_damage, dodge, animations, etc., are fine]
-# (Included here for completeness)
 
 ################################################################################
 #                                  DODGE LOGIC                                  #
 ################################################################################
 
 func perform_dodge():
+	# Cannot dodge if a needle is out
+	if is_needle_out: return
 	is_dodging = true
 	can_dodge = false
 	set_collision_mask_value(ENEMY_LAYER, false)
@@ -237,6 +304,11 @@ func _end_dodge():
 
 func take_damage(amount: int, source_position: Vector2):
 	if is_invincible or is_dodging: return
+	
+	# Release the grapple if player takes damage
+	if is_grappling or is_needle_out:
+		_release_grapple()
+	
 	_trigger_hit_effects()
 	_spawn_blood_splatter(player_hit_splat_count, Color.RED, global_position)
 	current_health -= amount
@@ -319,6 +391,12 @@ func update_animations():
 			animated_sprite.play("dodge") 
 		return 
 	
+	# New check for grappling animation (can be same as jump/fall)
+	if is_grappling:
+		if animated_sprite.animation != "jump": # Use jump or a custom "grapple_pull" animation
+			animated_sprite.play("jump")
+		return
+		
 	if is_in_attack_animation:
 		return
 	

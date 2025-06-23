@@ -5,11 +5,11 @@ extends CharacterBody2D
 
 @export var blood_effect_scene: PackedScene
 
-# NEW: Export variables for audio
 @export_group("Audio")
-@export var one_shot_audio_scene: PackedScene # Reference to OneShotAudio.tscn
-@export var hit_sound: AudioStream # The "impact" sound file
-@export var death_sound: AudioStream # The "death" sound file
+@export var one_shot_audio_scene: PackedScene
+@export var hit_sound: AudioStream
+@export var death_sound: AudioStream
+@export var alert_sound: AudioStream
 
 @export_group("Blood Splatter Settings")
 @export var hit_splat_count: int = 15
@@ -18,9 +18,12 @@ extends CharacterBody2D
 @export var death_splat_delay: float = 0.1
 
 @export_group("Enemy Movement")
-@export var chase_speed: float = 50.0
 @export var patrol_speed: float = 20.0
 @export var patrol_distance: float = 100.0
+@export var alert_duration: float = 0.5
+@export var charge_speed: float = 250.0
+@export var charge_duration: float = 0.75
+@export var charge_cooldown: float = 2.0
 
 @export_group("Enemy Damage & Invulnerability")
 @export var INVINCIBILITY_DURATION_ENEMY: float = 0.5
@@ -30,184 +33,248 @@ extends CharacterBody2D
 @export var enemy_weight: float = 1.0
 @export var push_resistance: float = 1.0
 
-# Collision Layer Constants
-const PLAYER_LAYER = 1
-const GROUND_LAYER = 2
-const ENEMY_LAYER = 3
-const PLAYER_ATTACK_LAYER = 4
+enum { IDLE, ALERTED, CHARGING, COOLDOWN }
+var state = IDLE
 
-# Enemy State Variables
 var current_health: int
 var is_invincible: bool = false
 var is_knocked_back: bool = false
-var is_player_detected: bool = false
+var charge_target_position: Vector2
 
-# References to child nodes
-@onready var animated_sprite: AnimatedSprite2D = $AnimatedSprite2D 
-@onready var vision_area: Area2D = $VisionArea 
-@onready var initial_position: Vector2 = global_position 
+var alert_timer: SceneTreeTimer = null
+var charge_timer: SceneTreeTimer = null
+var cooldown_timer: SceneTreeTimer = null
 
+@onready var animated_sprite: AnimatedSprite2D = $AnimatedSprite2D
+@onready var vision_area: Area2D = $VisionArea
+@onready var damage_zone: Area2D = $DamageZone
+@onready var initial_position: Vector2 = global_position
 
 func _ready():
-    current_health = MAX_HEALTH
-    vision_area.body_entered.connect(_on_VisionArea_body_entered)
-    vision_area.body_exited.connect(_on_VisionArea_body_exited)
+	current_health = MAX_HEALTH
+	_connect_vision_signals()
+	damage_zone.body_entered.connect(_on_damage_zone_body_entered)
+	change_state(IDLE)
 
 func _physics_process(delta: float):
-    velocity.y += 800 * delta 
-    if is_knocked_back:
-        pass 
-    else:
-        velocity.x = lerp(velocity.x, 0.0, 5.0 * delta)
-        if is_player_detected:
-            var player_node = get_tree().get_first_node_in_group("player")
-            if player_node:
-                var direction = (player_node.global_position - global_position).normalized()
-                velocity.x = move_toward(velocity.x, direction.x * chase_speed, 200 * delta)
-            else:
-                is_player_detected = false
-        else:
-            if abs(global_position.x - initial_position.x) >= patrol_distance / 2:
-                velocity.x *= -1 
-                initial_position.x = global_position.x
-            if velocity.x == 0:
-                velocity.x = patrol_speed
-            if abs(velocity.x) < patrol_speed:
-                velocity.x = sign(velocity.x) * patrol_speed
-    move_and_slide()
-    for i in get_slide_collision_count():
-        var collision = get_slide_collision(i)
-        var collider = collision.get_collider()
-        if collider and collider.is_in_group("player"):
-            if collider.has_method("take_damage"):
-                collider.take_damage(enemy_damage, global_position)
-            break 
-    update_animations()
+	velocity.y += 800 * delta
+	if is_knocked_back:
+		move_and_slide()
+		return
 
-# NEW: Helper function to play a one-shot sound at the enemy's location
-func _play_one_shot_sound(sound_stream: AudioStream, min_pitch: float = 0.9, max_pitch: float = 1.1):
-    # Ensure both the scene and the sound file are assigned
-    if not one_shot_audio_scene or not sound_stream:
-        push_warning("OneShotAudio scene or sound stream not assigned to enemy!")
-        return
-        
-    # Create an instance of the one-shot audio player
-    var audio_instance = one_shot_audio_scene.instantiate() as AudioStreamPlayer2D
-    
-    # Add it to the main scene tree so it's not deleted with the enemy
-    get_parent().add_child(audio_instance)
-    
-    # Position it where the enemy is
-    audio_instance.global_position = global_position
-    
-    # Calculate a random pitch
-    var random_pitch = randf_range(min_pitch, max_pitch)
-    
-    # Tell the audio player to fire with the specified sound and pitch
-    audio_instance.fire(sound_stream, random_pitch)
+	match state:
+		IDLE: _state_idle(delta)
+		ALERTED: _state_alerted(delta)
+		CHARGING: _state_charging(delta)
+		COOLDOWN: _state_cooldown(delta)
 
+	move_and_slide()
+	update_animations()
+
+func _state_idle(_delta):
+	if abs(global_position.x - initial_position.x) >= patrol_distance / 2:
+		velocity.x *= -1
+		initial_position.x = global_position.x
+	if velocity.x == 0:
+		velocity.x = patrol_speed
+	if abs(velocity.x) < patrol_speed:
+		velocity.x = sign(velocity.x) * patrol_speed
+	if animated_sprite:
+		animated_sprite.flip_h = velocity.x < 0
+
+func _state_alerted(_delta):
+	velocity.x = 0
+	var player_node = get_tree().get_first_node_in_group("player")
+	if player_node and animated_sprite:
+		animated_sprite.flip_h = (player_node.global_position.x < global_position.x)
+
+func _state_charging(_delta):
+	velocity.x = sign(velocity.x) * charge_speed
+	if animated_sprite:
+		animated_sprite.flip_h = velocity.x < 0
+
+func _state_cooldown(_delta):
+	velocity.x = lerp(velocity.x, 0.0, 5.0 * _delta)
+
+func change_state(new_state):
+	if state == new_state:
+		return
+
+	if alert_timer and is_instance_valid(alert_timer):
+		alert_timer.timeout.disconnect(_start_charge)
+		alert_timer = null
+	if charge_timer and is_instance_valid(charge_timer):
+		charge_timer.timeout.disconnect(_start_cooldown)
+		charge_timer = null
+	cooldown_timer = null
+
+	state = new_state
+
+	match state:
+		IDLE, ALERTED: _connect_vision_signals()
+		CHARGING, COOLDOWN: _disconnect_vision_signals()
+
+	match state:
+		IDLE:
+			pass
+		ALERTED:
+			_play_one_shot_sound(alert_sound, 1.0, 1.0)
+			alert_timer = get_tree().create_timer(alert_duration)
+			alert_timer.timeout.connect(_start_charge)
+		CHARGING:
+			_start_charge_logic()
+		COOLDOWN:
+			cooldown_timer = get_tree().create_timer(charge_cooldown)
+			cooldown_timer.timeout.connect(_on_cooldown_finished)
+
+func _start_charge():
+	if state == ALERTED:
+		change_state(CHARGING)
+
+func _start_cooldown():
+	if state == CHARGING:
+		change_state(COOLDOWN)
+
+func _on_cooldown_finished():
+	var player_node = get_tree().get_first_node_in_group("player")
+	if player_node and vision_area.get_overlapping_bodies().has(player_node):
+		change_state(ALERTED)
+	else:
+		change_state(IDLE)
+
+func _start_charge_logic():
+	var player_node = get_tree().get_first_node_in_group("player")
+	if player_node:
+		charge_target_position = player_node.global_position
+		var direction = (charge_target_position - global_position).normalized()
+		velocity.x = direction.x * charge_speed
+		charge_timer = get_tree().create_timer(charge_duration)
+		charge_timer.timeout.connect(_start_cooldown)
+	else:
+		change_state(IDLE)
+
+func _on_damage_zone_body_entered(body: Node):
+	if body.is_in_group("player") and not is_knocked_back:
+		if body.has_method("take_damage"):
+			body.take_damage(enemy_damage, global_position)
 
 func take_damage(amount: int, source_position: Vector2 = Vector2.INF):
-    if is_invincible:
-        return
-
-    # Play the hit sound
-    _play_one_shot_sound(hit_sound, 0.8, 1.2)
-        
-    current_health -= amount
-    
-    if current_health <= 0:
-        _die()
-        return
-
-    _spawn_blood_splatter(hit_splat_count, Color.RED, global_position)
-    _start_invincibility()
-    if source_position != Vector2.INF:
-        _start_knockback(source_position)
-
-func _spawn_blood_splatter(count: int, color: Color, position: Vector2):
-    if not blood_effect_scene: return
-    var blood_instance = blood_effect_scene.instantiate() as GPUParticles2D
-    get_parent().add_child(blood_instance)
-    blood_instance.global_position = position
-    if blood_instance.has_method("setup_and_fire"):
-        blood_instance.setup_and_fire(count, color)
-
-func _die():
-    print("Enemy defeated!")
-    
-    # Play the death sound
-    _play_one_shot_sound(death_sound, 0.7, 0.9) # Lower pitch for a bigger feel
-    
-    _spawn_blood_splatter(death_splat_count_1, Color.CRIMSON, global_position)
-    var timer = get_tree().create_timer(death_splat_delay)
-    timer.timeout.connect(func(): _spawn_blood_splatter(death_splat_count_2, Color.DARK_RED, global_position))
-    
-    # Immediately hide the enemy sprite and disable its collision/processing
-    hide()
-    set_process(false)
-    set_physics_process(false)
-    if get_node("CollisionShape2D"):
-        get_node("CollisionShape2D").set_deferred("disabled", true)
-        
-    # Wait a moment before fully removing the enemy node to let effects play out
-    get_tree().create_timer(0.5).timeout.connect(queue_free)
-
-func _start_invincibility():
-    is_invincible = true
-    set_collision_mask_value(PLAYER_ATTACK_LAYER, false) 
-    if animated_sprite:
-        var tween = create_tween()
-        tween.set_loops(int(INVINCIBILITY_DURATION_ENEMY * 12.5)) 
-        tween.tween_property(animated_sprite, "modulate", Color(1, 1, 1, 0.0), 0.04)
-        tween.tween_property(animated_sprite, "modulate", Color(1, 1, 1, 1.0), 0.04)
-        tween.set_trans(Tween.TRANS_LINEAR).set_ease(Tween.EASE_IN_OUT)
-        tween.finished.connect(_end_invincibility)
-    else:
-        get_tree().create_timer(INVINCIBILITY_DURATION_ENEMY).timeout.connect(_end_invincibility)
-
-func _end_invincibility():
-    is_invincible = false
-    set_collision_mask_value(PLAYER_ATTACK_LAYER, true)
-    if animated_sprite:
-        animated_sprite.modulate = Color(1, 1, 1, 1)
+	if is_invincible:
+		return
+	_play_one_shot_sound(hit_sound, 0.8, 1.2)
+	current_health -= amount
+	if current_health <= 0:
+		_die()
+		return
+	_spawn_blood_splatter(hit_splat_count, Color.RED, global_position)
+	_start_invincibility()
+	if source_position != Vector2.INF:
+		_start_knockback(source_position)
 
 func _start_knockback(source_position: Vector2):
-    is_knocked_back = true
-    var knockback_direction = (global_position - source_position).normalized()
-    var calculated_horizontal_force = KNOCKBACK_FORCE_HORIZONTAL_ENEMY / max(0.1, enemy_weight)
-    velocity.x = knockback_direction.x * calculated_horizontal_force
-    var calculated_vertical_force = KNOCKBACK_FORCE_VERTICAL_ENEMY / max(0.1, enemy_weight)
-    velocity.y = calculated_vertical_force 
-    get_tree().create_timer(KNOCKBACK_DURATION_ENEMY).timeout.connect(_end_knockback)
+	is_knocked_back = true
+	change_state(IDLE)
+	var knockback_direction = (global_position - source_position).normalized()
+	velocity.x = knockback_direction.x * (KNOCKBACK_FORCE_HORIZONTAL_ENEMY / max(0.1, enemy_weight))
+	velocity.y = KNOCKBACK_FORCE_VERTICAL_ENEMY / max(0.1, enemy_weight)
+	get_tree().create_timer(KNOCKBACK_DURATION_ENEMY).timeout.connect(_end_knockback)
 
 func _end_knockback():
-    is_knocked_back = false
+	is_knocked_back = false
+	change_state(COOLDOWN)
 
-func _on_VisionArea_body_entered(body: Node):
-    if body.is_in_group("player"):
-        is_player_detected = true
+func _spawn_blood_splatter(count: int, color: Color, position: Vector2):
+	if not blood_effect_scene:
+		return
+	var blood_instance = blood_effect_scene.instantiate() as GPUParticles2D
+	get_parent().add_child(blood_instance)
+	blood_instance.global_position = position
+	if blood_instance.has_method("setup_and_fire"):
+		blood_instance.setup_and_fire(count, color)
 
-func _on_VisionArea_body_exited(body: Node):
-    if body.is_in_group("player"):
-        is_player_detected = false
+func _play_one_shot_sound(sound_stream: AudioStream, min_pitch: float = 0.9, max_pitch: float = 1.1):
+	if not one_shot_audio_scene or not sound_stream:
+		return
+	var audio_instance = one_shot_audio_scene.instantiate() as AudioStreamPlayer2D
+	get_parent().add_child(audio_instance)
+	audio_instance.global_position = global_position
+	audio_instance.fire(sound_stream, randf_range(min_pitch, max_pitch))
+
+func _die():
+	_play_one_shot_sound(death_sound, 0.7, 0.9)
+	_spawn_blood_splatter(death_splat_count_1, Color.CRIMSON, global_position)
+	var timer = get_tree().create_timer(death_splat_delay)
+	timer.timeout.connect(func(): _spawn_blood_splatter(death_splat_count_2, Color.DARK_RED, global_position))
+
+	hide()
+	set_process(false)
+	set_physics_process(false)
+
+	# ✅ Disable body collision
+	if has_node("CollisionShape2D"):
+		$CollisionShape2D.set_deferred("disabled", true)
+
+	# ✅ Disable damage zone collision
+	if damage_zone.has_node("CollisionShape2D"):
+		damage_zone.get_node("CollisionShape2D").set_deferred("disabled", true)
+
+	# ✅ Disconnect signal to be safe
+	if damage_zone.body_entered.is_connected(_on_damage_zone_body_entered):
+		damage_zone.body_entered.disconnect(_on_damage_zone_body_entered)
+
+	get_tree().create_timer(0.5).timeout.connect(queue_free)
+
+func _start_invincibility():
+	is_invincible = true
+	set_collision_mask_value(4, false)
+	if animated_sprite:
+		var tween = create_tween()
+		tween.set_loops(int(INVINCIBILITY_DURATION_ENEMY * 12.5))
+		tween.tween_property(animated_sprite, "modulate", Color(1, 1, 1, 0.0), 0.04)
+		tween.tween_property(animated_sprite, "modulate", Color(1, 1, 1, 1.0), 0.04)
+		tween.finished.connect(_end_invincibility)
+	else:
+		get_tree().create_timer(INVINCIBILITY_DURATION_ENEMY).timeout.connect(_end_invincibility)
+
+func _end_invincibility():
+	is_invincible = false
+	set_collision_mask_value(4, true)
+	if animated_sprite:
+		animated_sprite.modulate = Color(1, 1, 1, 1)
 
 func apply_push_force(force: float, direction: float):
-    if is_knocked_back:
-        return
-    var push_force = force / max(0.1, push_resistance)
-    velocity.x = push_force * direction
+	if is_knocked_back:
+		return
+	velocity.x = (force / max(0.1, push_resistance)) * direction
+
+func _connect_vision_signals():
+	if not vision_area.body_entered.is_connected(_on_VisionArea_body_entered):
+		vision_area.body_entered.connect(_on_VisionArea_body_entered)
+	if not vision_area.body_exited.is_connected(_on_VisionArea_body_exited):
+		vision_area.body_exited.connect(_on_VisionArea_body_exited)
+
+func _disconnect_vision_signals():
+	if vision_area.body_entered.is_connected(_on_VisionArea_body_entered):
+		vision_area.body_entered.disconnect(_on_VisionArea_body_entered)
+	if vision_area.body_exited.is_connected(_on_VisionArea_body_exited):
+		vision_area.body_exited.disconnect(_on_VisionArea_body_exited)
+
+func _on_VisionArea_body_entered(body: Node):
+	if body.is_in_group("player") and state == IDLE and not is_knocked_back:
+		change_state(ALERTED)
+
+func _on_VisionArea_body_exited(body: Node):
+	if body.is_in_group("player") and state == ALERTED:
+		change_state(IDLE)
 
 func update_animations():
-    if not animated_sprite: return
-    if velocity.x > 0.1:
-        animated_sprite.flip_h = false
-    elif velocity.x < -0.1:
-        animated_sprite.flip_h = true
-    var target_animation = ""
-    if abs(velocity.x) > 5.0:
-        target_animation = "walk"
-    else:
-        target_animation = "idle"
-    if animated_sprite.animation != target_animation:
-        animated_sprite.play(target_animation)
+	if not animated_sprite:
+		return
+	var target_animation = ""
+	match state:
+		IDLE: target_animation = "walk"
+		ALERTED: target_animation = "idle"
+		CHARGING: target_animation = "walk"
+		COOLDOWN: target_animation = "idle"
+	if animated_sprite.animation != target_animation:
+		animated_sprite.play(target_animation)

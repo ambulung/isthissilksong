@@ -130,12 +130,12 @@ animations = [{
 }]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_ivps1"]
-radius = 6.0
+radius = 7.0
 height = 16.0
 
 [node name="Player" type="CharacterBody2D"]
-collision_layer = 17
-collision_mask = 5
+collision_layer = 9
+collision_mask = 2
 script = ExtResource("1_onrkg")
 attack_sprite_scene = ExtResource("2_fvtld")
 player_blood_effect_scene = ExtResource("3_s4jxa")

@@ -1,35 +1,24 @@
 extends CharacterBody2D
 
-################################################################################
-#                                   SIGNALS                                     #
-################################################################################
-
 signal health_updated(current_health, max_health)
-
-################################################################################
-#                                MOVEMENT SETTINGS                              #
-################################################################################
 
 @export_group("Horizontal Movement")
 @export var SPEED: float = 150.0
 @export var ACCELERATION: float = 10.0
 @export var FRICTION: float = 15.0
-
 @export_group("Jumping")
 @export var JUMP_VELOCITY: float = -300.0
 @export var GRAVITY: float = 800.0
 @export var JUMP_CUT_MULTIPLIER: float = 0.5
 @export var BOUNCE_VELOCITY_MULTIPLIER: float = 0.8
-
 @export_group("Jump Forgiveness")
 @export var COYOTE_TIME: float = 0.1
 @export var JUMP_BUFFER_TIME: float = 0.15
-
 @export_group("Grapple")
+@export var grapple_cooldown: float = 0.5 # You can set this to 2.0 in the editor
 @export var grapple_needle_scene: PackedScene
 @export var GRAPPLE_PULL_SPEED: float = 450.0
 @export var GRAPPLE_MAX_DISTANCE: float = 600.0
-
 @export_group("Attack")
 @export var attack_sprite_scene: PackedScene
 @export var attack_cooldown: float = 0.5
@@ -37,24 +26,18 @@ signal health_updated(current_health, max_health)
 @export var down_attack_offset_y: float = 20.0
 @export var up_attack_offset_y: float = -20.0
 @export var attack_damage: int = 10
-
 @export_group("Damage & Invulnerability")
 @export var MAX_HEALTH: int = 100
 @export var INVINCIBILITY_DURATION: float = 1.0
 @export var KNOCKBACK_FORCE_HORIZONTAL: float = 250.0
 @export var KNOCKBACK_FORCE_VERTICAL: float = -150.0
 @export var KNOCKBACK_DURATION: float = 0.25
-
 @export_group("Hit Effects")
 @export var hit_stop_duration: float = 0.08
 @export var hit_zoom_amount: float = 0.95
 @export var hit_zoom_duration: float = 0.1
 @export var player_blood_effect_scene: PackedScene
 @export var player_hit_splat_count: int = 20
-
-################################################################################
-#                                  NODES & STATE                                #
-################################################################################
 
 @onready var animated_sprite: AnimatedSprite2D = $AnimatedSprite2D
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
@@ -72,23 +55,19 @@ var is_knocked_back: bool = false
 
 var is_grappling: bool = false
 var is_needle_out: bool = false
+var _grapple_jump_available: bool = true
+var _is_grapple_on_cooldown: bool = false
 var grapple_point: Vector2 = Vector2.ZERO
 var needle_instance: Node = null
 
 const PLAYER_LAYER = 1
 const ENEMY_LAYER = 3
 
-################################################################################
-#                                  LIFECYCLE METHODS                            #
-################################################################################
-
 func _ready():
 	add_to_group("player")
 	animated_sprite.animation_finished.connect(_on_animated_sprite_animation_finished)
 	current_health = MAX_HEALTH
 	grapple_rope.clear_points()
-	
-	# Emit the initial health so the UI can draw itself correctly at the start.
 	health_updated.emit(current_health, MAX_HEALTH)
 
 func _physics_process(delta: float):
@@ -105,7 +84,12 @@ func _physics_process(delta: float):
 			perform_down_attack()
 		else:
 			perform_horizontal_attack()
-			
+	
+	var jump_pressed_this_frame = Input.is_action_just_pressed("jump")
+	
+	if jump_pressed_this_frame and is_grappling and _grapple_jump_available:
+		_perform_grapple_jump()
+
 	if is_grappling:
 		var direction_to_grapple = (grapple_point - global_position).normalized()
 		velocity = direction_to_grapple * GRAPPLE_PULL_SPEED
@@ -126,10 +110,11 @@ func _physics_process(delta: float):
 
 			if is_on_floor():
 				coyote_timer = COYOTE_TIME
+				_grapple_jump_available = true
 			else:
 				coyote_timer -= delta
 
-			if Input.is_action_just_pressed("jump"):
+			if jump_pressed_this_frame:
 				jump_buffer_timer = JUMP_BUFFER_TIME
 			else:
 				jump_buffer_timer -= delta
@@ -146,21 +131,29 @@ func _physics_process(delta: float):
 	update_animations()
 	_update_grapple_rope()
 
-################################################################################
-#                                  GRAPPLE LOGIC                                #
-################################################################################
+func _perform_grapple_jump():
+	_release_grapple()
+	velocity.y = JUMP_VELOCITY
+	_grapple_jump_available = false
+	coyote_timer = 0.0
+	jump_buffer_timer = 0.0
 
 func _launch_needle():
-	if not grapple_needle_scene or is_needle_out:
+	if not grapple_needle_scene or is_needle_out or _is_grapple_on_cooldown:
 		return
 		
+	_is_grapple_on_cooldown = true
+	get_tree().create_timer(grapple_cooldown).timeout.connect(_end_grapple_cooldown)
+	
 	is_needle_out = true
 	needle_instance = grapple_needle_scene.instantiate()
 	get_parent().add_child(needle_instance)
 	needle_instance.stuck.connect(_on_needle_stuck)
-	
 	var direction = Vector2(last_direction_x, 0)
 	needle_instance.launch(global_position, direction, GRAPPLE_MAX_DISTANCE)
+
+func _end_grapple_cooldown():
+	_is_grapple_on_cooldown = false
 
 func _on_needle_stuck(attach_position: Vector2):
 	grapple_point = attach_position
@@ -192,10 +185,6 @@ func _update_grapple_rope():
 	else:
 		grapple_rope.clear_points()
 
-################################################################################
-#                                  ATTACK LOGIC                                 #
-################################################################################
-
 func _play_attack_sound():
 	if attack_sound_player:
 		attack_sound_player.pitch_scale = randf_range(0.9, 1.1)
@@ -205,7 +194,6 @@ func perform_horizontal_attack():
 	var was_grappling = is_grappling
 	if was_grappling or is_needle_out:
 		_release_grapple()
-		
 	if not attack_sprite_scene: return
 	_play_attack_sound()
 	can_attack = false
@@ -223,7 +211,6 @@ func perform_down_attack():
 	var was_grappling = is_grappling
 	if was_grappling or is_needle_out:
 		_release_grapple()
-
 	if not attack_sprite_scene: return
 	_play_attack_sound()
 	can_attack = false
@@ -241,7 +228,6 @@ func perform_up_attack():
 	var was_grappling = is_grappling
 	if was_grappling or is_needle_out:
 		_release_grapple()
-
 	if not attack_sprite_scene: return
 	_play_attack_sound()
 	can_attack = false
@@ -264,31 +250,20 @@ func _on_attack_effect_hit_enemy(enemy_node: Node, attack_type: String, from_gra
 		var current_attack_damage = attack_damage
 		if from_grapple:
 			current_attack_damage *= 3
-			
 		enemy_node.take_damage(current_attack_damage, global_position)
-		
 		if attack_type == "down":
 			velocity.y = JUMP_VELOCITY * BOUNCE_VELOCITY_MULTIPLIER
 		elif attack_type == "up":
 			velocity.y = 0
 
-################################################################################
-#                             DAMAGE & INVULNERABILITY                          #
-################################################################################
-
 func take_damage(amount: int, source_position: Vector2):
 	if is_invincible: return
-	
 	if is_grappling or is_needle_out:
 		_release_grapple()
-	
 	_trigger_hit_effects()
 	_spawn_blood_splatter(player_hit_splat_count, Color.RED, global_position)
 	current_health -= amount
-	
-	# Emit the signal to update the UI.
 	health_updated.emit(current_health, MAX_HEALTH)
-	
 	if current_health <= 0:
 		_die()
 		return
@@ -323,16 +298,9 @@ func _end_knockback():
 func _die():
 	print("Player has been defeated!")
 	_spawn_blood_splatter(player_hit_splat_count * 2, Color.CRIMSON, global_position)
-	set_physics_process(false)
-	
-	# Emit a final update to show 0 health.
+	set_physics_process(false) 
 	health_updated.emit(0, MAX_HEALTH)
-	
 	queue_free()
-
-################################################################################
-#                              HIT EFFECTS LOGIC                                #
-################################################################################
 
 func _trigger_hit_effects():
 	var camera = get_tree().get_first_node_in_group("camera")
@@ -341,7 +309,6 @@ func _trigger_hit_effects():
 		var tween = get_tree().create_tween().set_ignore_time_scale(true)
 		tween.tween_property(camera, "zoom", original_zoom * hit_zoom_amount, hit_zoom_duration / 2.0).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		tween.tween_property(camera, "zoom", original_zoom, hit_zoom_duration / 2.0).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	
 	if hit_stop_duration > 0:
 		Engine.time_scale = 0.001
 		var hit_stop_timer = get_tree().create_timer(hit_stop_duration, false, false, true)
@@ -357,28 +324,20 @@ func _spawn_blood_splatter(count: int, color: Color, position: Vector2):
 	if blood_instance.has_method("setup_and_fire"):
 		blood_instance.setup_and_fire(count, color)
 
-################################################################################
-#                                  ANIMATION LOGIC                              #
-################################################################################
-
 func update_animations():
 	if not animated_sprite: return 
 	animated_sprite.flip_h = last_direction_x < 0
-	
 	if is_grappling:
 		if animated_sprite.animation != "jump":
 			animated_sprite.play("jump")
 		return
-		
 	if is_in_attack_animation:
 		return
-	
 	var target_animation = ""
 	if not is_on_floor():
 		target_animation = "jump" if velocity.y < 0 else "fall"
 	else:
 		target_animation = "walk" if abs(velocity.x) > 10 else "idle"
-	
 	if animated_sprite.animation != target_animation:
 		animated_sprite.play(target_animation)
 

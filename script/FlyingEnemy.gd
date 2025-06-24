@@ -165,14 +165,14 @@ func end_invincibility():
 		animated_sprite.modulate = Color(1, 1, 1, 1)
 
 func die():
-	_play_sound(death_sound, 0.8, 1.0)
+	_play_sound(death_sound, 0.7, 0)
 	_spawn_blood()
 	if has_node("CollisionShape2D"): # Safer check
 		$CollisionShape2D.set_deferred("disabled", true)
 	if damage_zone.has_node("CollisionShape2D"):
 		$DamageZone/CollisionShape2D.set_deferred("disabled", true)
 	# A small delay before freeing can prevent some race condition errors
-	get_tree().create_timer(0.1).timeout.connect(queue_free)
+	get_tree().create_timer(0.01).timeout.connect(queue_free)
 
 func _spawn_blood():
 	if not blood_effect_scene:

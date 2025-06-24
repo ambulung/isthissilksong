@@ -4,6 +4,7 @@
 [ext_resource type="Texture2D" uid="uid://dlxl26uaj5ydh" path="res://character/attack.png" id="1_gnlvf"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_r5ds7"]
+size = Vector2(22, 26)
 
 [node name="AttackEffect" type="Area2D"]
 collision_layer = 8
@@ -18,6 +19,7 @@ rotation = 3.14159
 texture = ExtResource("1_gnlvf")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, 1)
 shape = SubResource("RectangleShape2D_r5ds7")
 
 [node name="LifetimeTimer" type="Timer" parent="."]

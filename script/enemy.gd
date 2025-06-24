@@ -4,12 +4,12 @@ extends CharacterBody2D
 @export var enemy_damage: int = 10
 
 @export var blood_effect_scene: PackedScene
+@export var damage_text_scene: PackedScene # <--- ADDED: Assign your DamageText.tscn here
 
 @export_group("Audio")
 @export var one_shot_audio_scene: PackedScene
 @export var hit_sound: AudioStream
 @export var death_sound: AudioStream
-@export var alert_sound: AudioStream
 
 @export_group("Blood Splatter Settings")
 @export var hit_splat_count: int = 15
@@ -118,7 +118,6 @@ func change_state(new_state):
 		IDLE:
 			pass
 		ALERTED:
-			_play_one_shot_sound(alert_sound, 1.0, 1.0)
 			alert_timer = get_tree().create_timer(alert_duration)
 			alert_timer.timeout.connect(_start_charge)
 		CHARGING:
@@ -161,6 +160,10 @@ func _on_damage_zone_body_entered(body: Node):
 func take_damage(amount: int, source_position: Vector2 = Vector2.INF):
 	if is_invincible:
 		return
+	
+	# <--- MODIFIED: Spawn the damage text right away
+	_spawn_damage_text(amount)
+	
 	_play_one_shot_sound(hit_sound, 0.8, 1.2)
 	current_health -= amount
 	if current_health <= 0:
@@ -170,6 +173,26 @@ func take_damage(amount: int, source_position: Vector2 = Vector2.INF):
 	_start_invincibility()
 	if source_position != Vector2.INF:
 		_start_knockback(source_position)
+
+# <--- ADDED: This new function spawns the damage text
+func _spawn_damage_text(damage_amount: int):
+	# Only try to spawn if the scene has been assigned in the editor
+	if not damage_text_scene:
+		return
+		
+	# Create an instance of the damage text scene
+	var text_instance = damage_text_scene.instantiate() as Node2D
+	
+	# Add it to the main scene tree so it isn't destroyed if the enemy dies
+	get_tree().current_scene.add_child(text_instance)
+	
+	# Set its starting position to a random point near the top of the enemy
+	var random_offset = Vector2(randf_range(-15, 15), randf_range(-25, -15))
+	text_instance.global_position = global_position + random_offset
+	
+	# Start the animation
+	if text_instance.has_method("show_damage"):
+		text_instance.show_damage(damage_amount)
 
 func _start_knockback(source_position: Vector2):
 	is_knocked_back = true
@@ -210,15 +233,12 @@ func _die():
 	set_process(false)
 	set_physics_process(false)
 
-	# ✅ Disable body collision
 	if has_node("CollisionShape2D"):
 		$CollisionShape2D.set_deferred("disabled", true)
 
-	# ✅ Disable damage zone collision
 	if damage_zone.has_node("CollisionShape2D"):
 		damage_zone.get_node("CollisionShape2D").set_deferred("disabled", true)
 
-	# ✅ Disconnect signal to be safe
 	if damage_zone.body_entered.is_connected(_on_damage_zone_body_entered):
 		damage_zone.body_entered.disconnect(_on_damage_zone_body_entered)
 

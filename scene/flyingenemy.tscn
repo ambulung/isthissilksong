@@ -1,9 +1,10 @@
-[gd_scene load_steps=16 format=3 uid="uid://buhhcagplnfdu"]
+[gd_scene load_steps=17 format=3 uid="uid://buhhcagplnfdu"]
 
 [ext_resource type="Script" uid="uid://ce7iall601x8g" path="res://script/FlyingEnemy.gd" id="1_eiul2"]
 [ext_resource type="Texture2D" uid="uid://1fisytuxqskn" path="res://character/Enemy/fly1.png" id="2_eiul2"]
 [ext_resource type="PackedScene" uid="uid://c5038qhdsrim6" path="res://scene/blood_effect.tscn" id="2_odmjs"]
 [ext_resource type="PackedScene" uid="uid://nuefwlvd5ltx" path="res://scene/OneShotAudio.tscn" id="3_eiblw"]
+[ext_resource type="PackedScene" uid="uid://cwyp0ccaaeikt" path="res://scene/damage_text.tscn" id="3_odmjs"]
 [ext_resource type="AudioStream" uid="uid://csdpx8j0a60b5" path="res://audio/hit.mp3" id="4_tdy2k"]
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_wrjap"]
@@ -74,12 +75,14 @@ height = 24.0
 [node name="FlyingEnemy" type="CharacterBody2D" groups=["enemy"]]
 z_index = 8
 collision_layer = 4
-collision_mask = 10
+collision_mask = 11
 wall_min_slide_angle = 0.602139
 script = ExtResource("1_eiul2")
 MAX_HEALTH = 30
 speed = 80.0
+damage = 10
 blood_effect_scene = ExtResource("2_odmjs")
+damage_text_scene = ExtResource("3_odmjs")
 one_shot_audio_scene = ExtResource("3_eiblw")
 hit_sound = ExtResource("4_tdy2k")
 death_sound = ExtResource("4_tdy2k")

@@ -1,8 +1,9 @@
-[gd_scene load_steps=17 format=3 uid="uid://clbhl5hsfher7"]
+[gd_scene load_steps=18 format=3 uid="uid://clbhl5hsfher7"]
 
 [ext_resource type="Script" uid="uid://dkd35f8gva3wb" path="res://script/enemy.gd" id="1_f87vc"]
 [ext_resource type="Texture2D" uid="uid://buygp5oy0w74f" path="res://character/Enemy/bug1.png" id="2_f87vc"]
 [ext_resource type="PackedScene" uid="uid://c5038qhdsrim6" path="res://scene/blood_effect.tscn" id="2_yvcfn"]
+[ext_resource type="PackedScene" uid="uid://cwyp0ccaaeikt" path="res://scene/damage_text.tscn" id="3_1e552"]
 [ext_resource type="AudioStream" uid="uid://csdpx8j0a60b5" path="res://audio/hit.mp3" id="3_8u16h"]
 [ext_resource type="PackedScene" uid="uid://nuefwlvd5ltx" path="res://scene/OneShotAudio.tscn" id="3_ulb22"]
 
@@ -86,11 +87,12 @@ height = 24.0
 
 [node name="Enemy" type="CharacterBody2D" groups=["enemy"]]
 collision_layer = 4
-collision_mask = 10
+collision_mask = 11
 wall_min_slide_angle = 0.602139
 script = ExtResource("1_f87vc")
 MAX_HEALTH = 30
 blood_effect_scene = ExtResource("2_yvcfn")
+damage_text_scene = ExtResource("3_1e552")
 one_shot_audio_scene = ExtResource("3_ulb22")
 hit_sound = ExtResource("3_8u16h")
 death_sound = ExtResource("3_8u16h")
@@ -116,6 +118,7 @@ collision_layer = 0
 shape = SubResource("RectangleShape2D_f87vc")
 
 [node name="DamageZone" type="Area2D" parent="."]
+collision_layer = 0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="DamageZone"]
 position = Vector2(1, 0)

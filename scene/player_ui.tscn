@@ -1,0 +1,28 @@
+[gd_scene load_steps=4 format=3 uid="uid://cdk21vi823tdf"]
+
+[ext_resource type="Texture2D" uid="uid://btfm3ayl3fr43" path="res://character/UI/main_mask.png" id="1_hpojl"]
+[ext_resource type="Script" uid="uid://cdp01liu1wtuy" path="res://script/PlayerUI.gd" id="1_lpg6e"]
+[ext_resource type="Texture2D" uid="uid://bmpo5he7yqquf" path="res://character/UI/health_icon.png" id="2_6n5fa"]
+
+[node name="PlayerUI" type="CanvasLayer"]
+offset = Vector2(30, 30)
+scale = Vector2(2, 2)
+transform = Transform2D(2, 0, 0, 2, 30, 30)
+script = ExtResource("1_lpg6e")
+health_icon_texture = ExtResource("2_6n5fa")
+icon_start_position = Vector2(30, 10)
+icon_spacing = 15.0
+
+[node name="HBoxContainer" type="HBoxContainer" parent="."]
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="TextureRect" type="TextureRect" parent="HBoxContainer"]
+texture_filter = 1
+layout_mode = 2
+texture = ExtResource("1_hpojl")
+expand_mode = 2
+
+[node name="HealthIconsHolder" type="Node2D" parent="HBoxContainer"]
+texture_filter = 1
+scale = Vector2(1.5, 1.5)

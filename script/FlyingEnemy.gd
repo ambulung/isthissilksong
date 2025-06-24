@@ -20,7 +20,9 @@ extends CharacterBody2D
 @export var knockback_duration: float = 0.2
 @export var invincibility_duration: float = 0.5
 
+# <--- ADDED: Assign your DamageText.tscn and other scenes here
 @export var blood_effect_scene: PackedScene
+@export var damage_text_scene: PackedScene 
 @export var one_shot_audio_scene: PackedScene
 @export var hit_sound: AudioStream
 @export var death_sound: AudioStream
@@ -106,11 +108,15 @@ func _check_damage_zone():
 		if body.is_in_group("player") and not is_knocked_back:
 			if body.has_method("take_damage"):
 				body.take_damage(damage, global_position)
-				start_knockback(body.global_position)  # Knockback based on player pos
+				start_knockback(body.global_position)
 
 func take_damage(amount: int, source_position: Vector2 = Vector2.INF):
 	if is_invincible:
 		return
+		
+	# <--- MODIFIED: Spawn the damage text when damage is taken
+	_spawn_damage_text(amount)
+	
 	_play_sound(hit_sound, 0.9, 1.1)
 	current_health -= amount
 	if current_health <= 0:
@@ -121,9 +127,22 @@ func take_damage(amount: int, source_position: Vector2 = Vector2.INF):
 		if source_position != Vector2.INF:
 			start_knockback(source_position)
 
+# <--- ADDED: This new function spawns and configures the damage text
+func _spawn_damage_text(damage_amount: int):
+	if not damage_text_scene:
+		return
+		
+	var text_instance = damage_text_scene.instantiate() as Node2D
+	get_tree().current_scene.add_child(text_instance)
+	
+	var random_offset = Vector2(randf_range(-15, 15), randf_range(-25, -15))
+	text_instance.global_position = global_position + random_offset
+	
+	if text_instance.has_method("show_damage"):
+		text_instance.show_damage(damage_amount)
+
 func start_knockback(source_position: Vector2):
 	is_knocked_back = true
-	# Knockback direction fully based on player's relative position
 	var dir = (global_position - source_position).normalized()
 	velocity = dir * knockback_force
 	get_tree().create_timer(knockback_duration).timeout.connect(end_knockback)
@@ -148,9 +167,12 @@ func end_invincibility():
 func die():
 	_play_sound(death_sound, 0.8, 1.0)
 	_spawn_blood()
+	if has_node("CollisionShape2D"): # Safer check
+		$CollisionShape2D.set_deferred("disabled", true)
 	if damage_zone.has_node("CollisionShape2D"):
 		$DamageZone/CollisionShape2D.set_deferred("disabled", true)
-	queue_free()
+	# A small delay before freeing can prevent some race condition errors
+	get_tree().create_timer(0.1).timeout.connect(queue_free)
 
 func _spawn_blood():
 	if not blood_effect_scene:
@@ -167,7 +189,8 @@ func _play_sound(stream: AudioStream, min_pitch: float, max_pitch: float):
 	var audio = one_shot_audio_scene.instantiate()
 	get_parent().add_child(audio)
 	audio.global_position = global_position
-	audio.fire(stream, randf_range(min_pitch, max_pitch))
+	if audio.has_method("fire"):
+		audio.fire(stream, randf_range(min_pitch, max_pitch))
 
 func update_animation():
 	if not animated_sprite:

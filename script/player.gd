@@ -1,10 +1,8 @@
 # File: player.gd
 extends CharacterBody2D
 
-# Signals
 signal health_updated(current_health, max_health)
 
-# Export Groups for organization in the Inspector
 @export_group("Horizontal Movement")
 @export var SPEED: float = 150.0
 @export var ACCELERATION: float = 10.0
@@ -42,23 +40,19 @@ signal health_updated(current_health, max_health)
 @export var player_blood_effect_scene: PackedScene
 @export var player_hit_splat_count: int = 20
 
-# On-ready variables
 @onready var animated_sprite: AnimatedSprite2D = $AnimatedSprite2D
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
 @onready var attack_sound_player: AudioStreamPlayer2D = $AttackSoundPlayer
 @onready var grapple_rope: Line2D = $GrappleRope
 
-# State variables
 var coyote_timer: float = 0.0
 var jump_buffer_timer: float = 0.0
 var last_direction_x: float = 1.0
 var can_attack: bool = true
 var is_in_attack_animation: bool = false
-var current_health: int # This will be loaded from Global
+var current_health: int
 var is_invincible: bool = false
 var is_knocked_back: bool = false
-
-# Grapple state variables
 var is_grappling: bool = false
 var is_needle_out: bool = false
 var _grapple_jump_available: bool = true
@@ -66,51 +60,45 @@ var _is_grapple_on_cooldown: bool = false
 var grapple_point: Vector2 = Vector2.ZERO
 var needle_instance: Node = null
 
-# Collision Layers
-const ENEMY_LAYER = 3 # Make sure this matches your project settings
+const ENEMY_LAYER = 3
 
-# --- NEW STATE MANAGEMENT FUNCTIONS ---
+# --- NEW STATE MANAGEMENT AND ORIENTATION FUNCTIONS ---
+
 func save_state():
 	"""Saves the player's current data to the Global singleton."""
-	print("Player saving state to Global. Current Health: ", current_health)
 	Global.player_data.current_health = current_health
 	Global.player_data.max_health = MAX_HEALTH
-	# Example for other stats:
-	# Global.player_data.money = self.money
-	# Global.player_data.has_double_jump = self.has_double_jump
+	# Add other stats to save here: Global.player_data.money = self.money
 
 func load_state():
 	"""Loads the player's data from the Global singleton."""
 	self.current_health = Global.player_data.current_health
 	self.MAX_HEALTH = Global.player_data.max_health
-	# Example for other stats:
-	# self.money = Global.player_data.money
-	# self.has_double_jump = Global.player_data.has_double_jump
-	print("Player loaded state from Global. Current Health: ", current_health)
-	
-	# Immediately update the health UI after loading the state.
+	# Add other stats to load here: self.money = Global.player_data.money
 	health_updated.emit(current_health, MAX_HEALTH)
 
+func set_facing_direction(direction: int):
+	"""Forces the player to face a specific direction (-1 for Left, 1 for Right)."""
+	if direction in [-1, 1]:
+		self.last_direction_x = direction
+		update_animations() # Immediately update the sprite's flip_h
 
-# --- INITIALIZATION ---
+# --- MODIFIED INITIALIZATION ---
+
 func _ready():
-	# This function is called every time a new player instance is created (i.e., on every scene load).
 	add_to_group("player")
 	animated_sprite.animation_finished.connect(_on_animated_sprite_animation_finished)
 	grapple_rope.clear_points()
-	
-	# Instead of resetting health, we LOAD our persistent state from Global.
-	load_state()
+	load_state() # Load persistent data instead of resetting it.
 
+# --- ALL OTHER FUNCTIONS (UNCHANGED) ---
 
-# --- PHYSICS AND GAME LOOP (Your existing code, unchanged) ---
 func _physics_process(delta: float):
 	if Input.is_action_just_pressed("grapple"):
 		if is_grappling or is_needle_out:
 			_release_grapple()
 		else:
 			_launch_needle()
-
 	if Input.is_action_just_pressed("attack") and can_attack and not is_in_attack_animation:
 		if Input.is_action_pressed("up"):
 			perform_up_attack()
@@ -118,12 +106,9 @@ func _physics_process(delta: float):
 			perform_down_attack()
 		else:
 			perform_horizontal_attack()
-	
 	var jump_pressed_this_frame = Input.is_action_just_pressed("jump")
-	
 	if jump_pressed_this_frame and is_grappling and _grapple_jump_available:
 		_perform_grapple_jump()
-
 	if is_grappling:
 		var direction_to_grapple = (grapple_point - global_position).normalized()
 		velocity = direction_to_grapple * GRAPPLE_PULL_SPEED
@@ -131,7 +116,6 @@ func _physics_process(delta: float):
 			_release_grapple()
 	else:
 		velocity.y += GRAVITY * delta
-
 		if is_knocked_back:
 			pass
 		else:
@@ -141,32 +125,25 @@ func _physics_process(delta: float):
 				last_direction_x = input_direction_x
 			else:
 				velocity.x = lerp(velocity.x, 0.0, FRICTION * delta)
-
 			if is_on_floor():
 				coyote_timer = COYOTE_TIME
 				_grapple_jump_available = true
 			else:
 				coyote_timer -= delta
-
 			if jump_pressed_this_frame:
 				jump_buffer_timer = JUMP_BUFFER_TIME
 			else:
 				jump_buffer_timer -= delta
-
 			if jump_buffer_timer > 0 and coyote_timer > 0:
 				velocity.y = JUMP_VELOCITY
 				coyote_timer = 0.0
 				jump_buffer_timer = 0.0
-
 			if Input.is_action_just_released("jump") and velocity.y < 0:
 				velocity.y *= JUMP_CUT_MULTIPLIER
-	
 	move_and_slide()
 	update_animations()
 	_update_grapple_rope()
 
-# --- All your other functions (_perform_grapple_jump, take_damage, etc.) remain below this line ---
-# (The rest of your code is perfect and doesn't need to be pasted here again)
 func _perform_grapple_jump():
 	_release_grapple()
 	velocity.y = JUMP_VELOCITY
@@ -177,10 +154,8 @@ func _perform_grapple_jump():
 func _launch_needle():
 	if not grapple_needle_scene or is_needle_out or _is_grapple_on_cooldown:
 		return
-		
 	_is_grapple_on_cooldown = true
 	get_tree().create_timer(grapple_cooldown).timeout.connect(_end_grapple_cooldown)
-	
 	is_needle_out = true
 	needle_instance = grapple_needle_scene.instantiate()
 	get_parent().add_child(needle_instance)
@@ -228,8 +203,7 @@ func _play_attack_sound():
 
 func perform_horizontal_attack():
 	var was_grappling = is_grappling
-	if was_grappling or is_needle_out:
-		_release_grapple()
+	if was_grappling or is_needle_out: _release_grapple()
 	if not attack_sprite_scene: return
 	_play_attack_sound()
 	can_attack = false
@@ -245,8 +219,7 @@ func perform_horizontal_attack():
 
 func perform_down_attack():
 	var was_grappling = is_grappling
-	if was_grappling or is_needle_out:
-		_release_grapple()
+	if was_grappling or is_needle_out: _release_grapple()
 	if not attack_sprite_scene: return
 	_play_attack_sound()
 	can_attack = false
@@ -262,8 +235,7 @@ func perform_down_attack():
 
 func perform_up_attack():
 	var was_grappling = is_grappling
-	if was_grappling or is_needle_out:
-		_release_grapple()
+	if was_grappling or is_needle_out: _release_grapple()
 	if not attack_sprite_scene: return
 	_play_attack_sound()
 	can_attack = false
@@ -284,18 +256,14 @@ func _on_attack_effect_hit_enemy(enemy_node: Node, attack_type: String, from_gra
 	_trigger_hit_effects()
 	if enemy_node and enemy_node.has_method("take_damage"):
 		var current_attack_damage = attack_damage
-		if from_grapple:
-			current_attack_damage *= 3
+		if from_grapple: current_attack_damage *= 3
 		enemy_node.take_damage(current_attack_damage, global_position)
-		if attack_type == "down":
-			velocity.y = JUMP_VELOCITY * BOUNCE_VELOCITY_MULTIPLIER
-		elif attack_type == "up":
-			velocity.y = 0
+		if attack_type == "down": velocity.y = JUMP_VELOCITY * BOUNCE_VELOCITY_MULTIPLIER
+		elif attack_type == "up": velocity.y = 0
 
 func take_damage(amount: int, source_position: Vector2):
 	if is_invincible: return
-	if is_grappling or is_needle_out:
-		_release_grapple()
+	if is_grappling or is_needle_out: _release_grapple()
 	_trigger_hit_effects()
 	_spawn_blood_splatter(player_hit_splat_count, Color.RED, global_position)
 	current_health -= amount
@@ -336,6 +304,8 @@ func _die():
 	_spawn_blood_splatter(player_hit_splat_count * 2, Color.CRIMSON, global_position)
 	set_physics_process(false) 
 	health_updated.emit(0, MAX_HEALTH)
+	# You might want to reload the scene or go to a game over screen here
+	# For now, it just removes the player
 	queue_free()
 
 func _trigger_hit_effects():
@@ -364,11 +334,9 @@ func update_animations():
 	if not animated_sprite: return 
 	animated_sprite.flip_h = last_direction_x < 0
 	if is_grappling:
-		if animated_sprite.animation != "jump":
-			animated_sprite.play("jump")
+		if animated_sprite.animation != "jump": animated_sprite.play("jump")
 		return
-	if is_in_attack_animation:
-		return
+	if is_in_attack_animation: return
 	var target_animation = ""
 	if not is_on_floor():
 		target_animation = "jump" if velocity.y < 0 else "fall"

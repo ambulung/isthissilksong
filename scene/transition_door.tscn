@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3 uid="uid://dfamjeyq7f5lq"]
 
-[ext_resource type="Script" uid="uid://df10pg2hukwrn" path="res://transition_door.gd" id="1_ormrv"]
+[ext_resource type="Script" uid="uid://df10pg2hukwrn" path="res://script/transition_door.gd" id="1_ormrv"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_7g4rh"]
 

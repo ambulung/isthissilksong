@@ -14,7 +14,7 @@ var player_spawn_facing_direction: int = 1
 # --- PERSISTENT PLAYER DATA ---
 # This dictionary stores all the player's stats that carry over.
 var player_data = {
-	"current_health": 100,
+	"current_health": 30,
 	"max_health": 100,
 	# Add other things to save here, like:
 	# "money": 0,
@@ -25,6 +25,6 @@ var player_data = {
 # Optional function to call from a main menu to start a fresh game.
 func reset_player_data():
 	player_data = {
-		"current_health": 100,
+		"current_health": 30,
 		"max_health": 100,
 	}

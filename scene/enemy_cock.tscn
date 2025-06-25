@@ -1,0 +1,87 @@
+[gd_scene load_steps=14 format=3 uid="uid://ditrsskxkqjus"]
+
+[ext_resource type="Script" uid="uid://d0ce44jqg4cbf" path="res://scene/enemy_cock.gd" id="1_68r7g"]
+[ext_resource type="Texture2D" uid="uid://cgj0njmivx2ha" path="res://character/Enemy/cock.png" id="2_f5jkl"]
+[ext_resource type="PackedScene" uid="uid://c5038qhdsrim6" path="res://scene/blood_effect.tscn" id="2_t06qn"]
+[ext_resource type="PackedScene" uid="uid://cwyp0ccaaeikt" path="res://scene/damage_text.tscn" id="3_mpy72"]
+[ext_resource type="PackedScene" uid="uid://nuefwlvd5ltx" path="res://scene/OneShotAudio.tscn" id="4_4rwc7"]
+[ext_resource type="AudioStream" uid="uid://csdpx8j0a60b5" path="res://audio/hit.mp3" id="5_n7jls"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_clrij"]
+atlas = ExtResource("2_f5jkl")
+region = Rect2(0, 0, 16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_3wi6y"]
+atlas = ExtResource("2_f5jkl")
+region = Rect2(16, 0, 16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_asan2"]
+atlas = ExtResource("2_f5jkl")
+region = Rect2(32, 0, 16, 16)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_b7koy"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_clrij")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_3wi6y")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_asan2")
+}],
+"loop": true,
+"name": &"walk",
+"speed": 5.0
+}]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_b7koy"]
+radius = 5.0
+height = 12.0
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_f87vc"]
+size = Vector2(200, 200)
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_yvcfn"]
+radius = 9.0
+height = 18.0
+
+[node name="EnemyCock" type="CharacterBody2D" groups=["enemy"]]
+collision_layer = 4
+collision_mask = 11
+wall_min_slide_angle = 0.602139
+script = ExtResource("1_68r7g")
+MAX_HEALTH = 20
+blood_effect_scene = ExtResource("2_t06qn")
+damage_text_scene = ExtResource("3_mpy72")
+one_shot_audio_scene = ExtResource("4_4rwc7")
+hit_sound = ExtResource("5_n7jls")
+death_sound = ExtResource("5_n7jls")
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." groups=["enemy"]]
+texture_filter = 1
+position = Vector2(0, -1)
+scale = Vector2(1.5, 1.5)
+sprite_frames = SubResource("SpriteFrames_b7koy")
+animation = &"walk"
+autoplay = "walk"
+frame_progress = 0.271394
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, 5)
+shape = SubResource("CapsuleShape2D_b7koy")
+
+[node name="VisionArea" type="Area2D" parent="."]
+collision_layer = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="VisionArea"]
+position = Vector2(-1, 1)
+shape = SubResource("RectangleShape2D_f87vc")
+
+[node name="DamageZone" type="Area2D" parent="."]
+collision_layer = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="DamageZone"]
+position = Vector2(0, 4)
+shape = SubResource("CapsuleShape2D_yvcfn")

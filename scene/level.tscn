@@ -168,6 +168,8 @@ position = Vector2(-385, 100)
 [node name="SpawnFromLevel2" type="Marker2D" parent="."]
 position = Vector2(-414, 118)
 
-[node name="Camera2D" type="Camera2D" parent="."]
+[node name="Camera2D" type="Camera2D" parent="." groups=["camera"]]
+offset = Vector2(0, -35)
 zoom = Vector2(3, 3)
+position_smoothing_enabled = true
 script = ExtResource("2_7g0b6")

@@ -144,7 +144,8 @@ target_spawn_name = "SpawnFromLevel2"
 [node name="Player" parent="." instance=ExtResource("5_nluny")]
 position = Vector2(-439, -13)
 
-[node name="Camera2D" type="Camera2D" parent="."]
-position = Vector2(-230, 8)
+[node name="Camera2D" type="Camera2D" parent="." groups=["camera"]]
+offset = Vector2(0, -35)
 zoom = Vector2(3, 3)
+position_smoothing_enabled = true
 script = ExtResource("4_if17c")

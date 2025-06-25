@@ -1,7 +1,7 @@
 [gd_scene load_steps=9 format=3 uid="uid://c48y4nt77ptnn"]
 
 [ext_resource type="PackedScene" uid="uid://cdk21vi823tdf" path="res://scene/player_ui.tscn" id="1_1gfuc"]
-[ext_resource type="Script" uid="uid://bf03043fuyqh6" path="res://scene/forsen_level.gd" id="1_lnfv4"]
+[ext_resource type="Script" uid="uid://bf03043fuyqh6" path="res://script/forsen_level.gd" id="1_lnfv4"]
 [ext_resource type="Texture2D" uid="uid://g8qanjtbcy6u" path="res://tileset/ground.png" id="2_2x5qe"]
 [ext_resource type="PackedScene" uid="uid://dfamjeyq7f5lq" path="res://scene/transition_door.tscn" id="3_2x5qe"]
 [ext_resource type="Script" uid="uid://bt8cj7igdyuft" path="res://script/player_camera.gd" id="4_if17c"]

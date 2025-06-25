@@ -1,7 +1,10 @@
+# File: player.gd
 extends CharacterBody2D
 
+# Signals
 signal health_updated(current_health, max_health)
 
+# Export Groups for organization in the Inspector
 @export_group("Horizontal Movement")
 @export var SPEED: float = 150.0
 @export var ACCELERATION: float = 10.0
@@ -15,7 +18,7 @@ signal health_updated(current_health, max_health)
 @export var COYOTE_TIME: float = 0.1
 @export var JUMP_BUFFER_TIME: float = 0.15
 @export_group("Grapple")
-@export var grapple_cooldown: float = 0.5 # You can set this to 2.0 in the editor
+@export var grapple_cooldown: float = 0.5
 @export var grapple_needle_scene: PackedScene
 @export var GRAPPLE_PULL_SPEED: float = 450.0
 @export var GRAPPLE_MAX_DISTANCE: float = 600.0
@@ -39,20 +42,23 @@ signal health_updated(current_health, max_health)
 @export var player_blood_effect_scene: PackedScene
 @export var player_hit_splat_count: int = 20
 
+# On-ready variables
 @onready var animated_sprite: AnimatedSprite2D = $AnimatedSprite2D
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
 @onready var attack_sound_player: AudioStreamPlayer2D = $AttackSoundPlayer
 @onready var grapple_rope: Line2D = $GrappleRope
 
+# State variables
 var coyote_timer: float = 0.0
 var jump_buffer_timer: float = 0.0
 var last_direction_x: float = 1.0
 var can_attack: bool = true
 var is_in_attack_animation: bool = false
-var current_health: int
+var current_health: int # This will be loaded from Global
 var is_invincible: bool = false
 var is_knocked_back: bool = false
 
+# Grapple state variables
 var is_grappling: bool = false
 var is_needle_out: bool = false
 var _grapple_jump_available: bool = true
@@ -60,16 +66,44 @@ var _is_grapple_on_cooldown: bool = false
 var grapple_point: Vector2 = Vector2.ZERO
 var needle_instance: Node = null
 
-const PLAYER_LAYER = 1
-const ENEMY_LAYER = 3
+# Collision Layers
+const ENEMY_LAYER = 3 # Make sure this matches your project settings
 
-func _ready():
-	add_to_group("player")
-	animated_sprite.animation_finished.connect(_on_animated_sprite_animation_finished)
-	current_health = MAX_HEALTH
-	grapple_rope.clear_points()
+# --- NEW STATE MANAGEMENT FUNCTIONS ---
+func save_state():
+	"""Saves the player's current data to the Global singleton."""
+	print("Player saving state to Global. Current Health: ", current_health)
+	Global.player_data.current_health = current_health
+	Global.player_data.max_health = MAX_HEALTH
+	# Example for other stats:
+	# Global.player_data.money = self.money
+	# Global.player_data.has_double_jump = self.has_double_jump
+
+func load_state():
+	"""Loads the player's data from the Global singleton."""
+	self.current_health = Global.player_data.current_health
+	self.MAX_HEALTH = Global.player_data.max_health
+	# Example for other stats:
+	# self.money = Global.player_data.money
+	# self.has_double_jump = Global.player_data.has_double_jump
+	print("Player loaded state from Global. Current Health: ", current_health)
+	
+	# Immediately update the health UI after loading the state.
 	health_updated.emit(current_health, MAX_HEALTH)
 
+
+# --- INITIALIZATION ---
+func _ready():
+	# This function is called every time a new player instance is created (i.e., on every scene load).
+	add_to_group("player")
+	animated_sprite.animation_finished.connect(_on_animated_sprite_animation_finished)
+	grapple_rope.clear_points()
+	
+	# Instead of resetting health, we LOAD our persistent state from Global.
+	load_state()
+
+
+# --- PHYSICS AND GAME LOOP (Your existing code, unchanged) ---
 func _physics_process(delta: float):
 	if Input.is_action_just_pressed("grapple"):
 		if is_grappling or is_needle_out:
@@ -131,6 +165,8 @@ func _physics_process(delta: float):
 	update_animations()
 	_update_grapple_rope()
 
+# --- All your other functions (_perform_grapple_jump, take_damage, etc.) remain below this line ---
+# (The rest of your code is perfect and doesn't need to be pasted here again)
 func _perform_grapple_jump():
 	_release_grapple()
 	velocity.y = JUMP_VELOCITY

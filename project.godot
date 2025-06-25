@@ -15,6 +15,10 @@ run/main_scene="uid://whbc8j1qjfn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[autoload]
+
+Global="*res://script/Global.gd"
+
 [input]
 
 left={
@@ -65,6 +69,7 @@ grapple={
 2d_physics/layer_3="Enemy"
 2d_physics/layer_4="PlayerAttack"
 2d_physics/layer_5="player_projectiles"
+2d_physics/layer_6="Interactables"
 
 [rendering]
 

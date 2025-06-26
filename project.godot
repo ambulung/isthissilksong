@@ -71,6 +71,7 @@ grapple={
 2d_physics/layer_4="PlayerAttack"
 2d_physics/layer_5="enemy_projectiles"
 2d_physics/layer_6="Interactables"
+2d_physics/layer_7="hazards"
 
 [rendering]
 

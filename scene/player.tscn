@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3 uid="uid://dt7fqvupclumi"]
+[gd_scene load_steps=21 format=3 uid="uid://dt7fqvupclumi"]
 
 [ext_resource type="Script" uid="uid://qcmvhdm2w6ur" path="res://script/player.gd" id="1_onrkg"]
 [ext_resource type="PackedScene" uid="uid://bf4mqagq8ov0n" path="res://scene/AttackEffect.tscn" id="2_fvtld"]
@@ -134,6 +134,10 @@ animations = [{
 radius = 7.0
 height = 16.0
 
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_oh5ij"]
+radius = 7.0
+height = 18.0
+
 [node name="Player" type="CharacterBody2D" groups=["player"]]
 collision_layer = 9
 collision_mask = 6
@@ -161,3 +165,13 @@ volume_db = -5.0
 [node name="GrappleRope" type="Line2D" parent="."]
 width = 1.0
 joint_mode = 2
+
+[node name="HazardDetector" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 64
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="HazardDetector"]
+position = Vector2(0, 3)
+shape = SubResource("CapsuleShape2D_oh5ij")
+
+[connection signal="body_entered" from="HazardDetector" to="." method="_on_hazard_detector_body_entered"]

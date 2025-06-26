@@ -39,11 +39,14 @@ signal health_updated(current_health, max_health)
 @export var hit_zoom_duration: float = 0.1
 @export var player_blood_effect_scene: PackedScene
 @export var player_hit_splat_count: int = 20
+@export_group("Respawn")
+@export var respawn_sprite_delay: float = 0.2
 
 @onready var animated_sprite: AnimatedSprite2D = $AnimatedSprite2D
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
 @onready var attack_sound_player: AudioStreamPlayer2D = $AttackSoundPlayer
 @onready var grapple_rope: Line2D = $GrappleRope
+@onready var hazard_detector: Area2D = $HazardDetector
 
 var coyote_timer: float = 0.0
 var jump_buffer_timer: float = 0.0
@@ -59,65 +62,58 @@ var _grapple_jump_available: bool = true
 var _is_grapple_on_cooldown: bool = false
 var grapple_point: Vector2 = Vector2.ZERO
 var needle_instance: Node = null
+var is_respawning: bool = false
 
 const ENEMY_LAYER = 3
 
-# --- NEW STATE MANAGEMENT AND ORIENTATION FUNCTIONS ---
-
+# --- STATE MANAGEMENT ---
 func save_state():
-	"""Saves the player's current data to the Global singleton."""
 	Global.player_data.current_health = current_health
 	Global.player_data.max_health = MAX_HEALTH
-	# Add other stats to save here: Global.player_data.money = self.money
 
 func load_state():
-	"""Loads the player's data from the Global singleton."""
 	self.current_health = Global.player_data.current_health
 	self.MAX_HEALTH = Global.player_data.max_health
-	# Add other stats to load here: self.money = Global.player_data.money
 	health_updated.emit(current_health, MAX_HEALTH)
 
 func set_facing_direction(direction: int):
-	"""Forces the player to face a specific direction (-1 for Left, 1 for Right)."""
 	if direction in [-1, 1]:
 		self.last_direction_x = direction
-		update_animations() # Immediately update the sprite's flip_h
+		update_animations()
 
-# --- MODIFIED INITIALIZATION ---
-
+# --- INITIALIZATION ---
 func _ready():
 	add_to_group("player")
 	animated_sprite.animation_finished.connect(_on_animated_sprite_animation_finished)
+	SceneFader.faded_to_black.connect(_handle_respawn_sequence)
 	grapple_rope.clear_points()
-	load_state() # Load persistent data instead of resetting it.
+	load_state()
+	if Global.current_checkpoint_position == Vector2.ZERO:
+		Global.current_checkpoint_position = global_position
 
-# --- ALL OTHER FUNCTIONS (UNCHANGED) ---
-
+# --- CORE LOGIC ---
 func _physics_process(delta: float):
+	if is_respawning:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+
 	if Input.is_action_just_pressed("grapple"):
-		if is_grappling or is_needle_out:
-			_release_grapple()
-		else:
-			_launch_needle()
+		if is_grappling or is_needle_out: _release_grapple()
+		else: _launch_needle()
 	if Input.is_action_just_pressed("attack") and can_attack and not is_in_attack_animation:
-		if Input.is_action_pressed("up"):
-			perform_up_attack()
-		elif not is_on_floor() and Input.is_action_pressed("down") and velocity.y >= 0:
-			perform_down_attack()
-		else:
-			perform_horizontal_attack()
+		if Input.is_action_pressed("up"): perform_up_attack()
+		elif not is_on_floor() and Input.is_action_pressed("down") and velocity.y >= 0: perform_down_attack()
+		else: perform_horizontal_attack()
 	var jump_pressed_this_frame = Input.is_action_just_pressed("jump")
-	if jump_pressed_this_frame and is_grappling and _grapple_jump_available:
-		_perform_grapple_jump()
+	if jump_pressed_this_frame and is_grappling and _grapple_jump_available: _perform_grapple_jump()
 	if is_grappling:
 		var direction_to_grapple = (grapple_point - global_position).normalized()
 		velocity = direction_to_grapple * GRAPPLE_PULL_SPEED
-		if global_position.distance_to(grapple_point) < 20.0:
-			_release_grapple()
+		if global_position.distance_to(grapple_point) < 20.0: _release_grapple()
 	else:
 		velocity.y += GRAVITY * delta
-		if is_knocked_back:
-			pass
+		if is_knocked_back: pass
 		else:
 			var input_direction_x = Input.get_axis("left", "right")
 			if input_direction_x != 0:
@@ -128,12 +124,9 @@ func _physics_process(delta: float):
 			if is_on_floor():
 				coyote_timer = COYOTE_TIME
 				_grapple_jump_available = true
-			else:
-				coyote_timer -= delta
-			if jump_pressed_this_frame:
-				jump_buffer_timer = JUMP_BUFFER_TIME
-			else:
-				jump_buffer_timer -= delta
+			else: coyote_timer -= delta
+			if jump_pressed_this_frame: jump_buffer_timer = JUMP_BUFFER_TIME
+			else: jump_buffer_timer -= delta
 			if jump_buffer_timer > 0 and coyote_timer > 0:
 				velocity.y = JUMP_VELOCITY
 				coyote_timer = 0.0
@@ -144,6 +137,45 @@ func _physics_process(delta: float):
 	update_animations()
 	_update_grapple_rope()
 
+# --- HAZARD AND RESPAWN LOGIC ---
+
+func _on_hazard_detector_body_entered(body: Node2D):
+	_handle_hazard_hit()
+
+func _handle_hazard_hit():
+	"""A dedicated function for hazards that IGNORES invincibility frames."""
+	if is_respawning:
+		return
+
+	is_respawning = true
+	
+	# Manually apply effects and damage, bypassing the main take_damage function.
+	_trigger_hit_effects()
+	_spawn_blood_splatter(player_hit_splat_count, Color.RED, global_position)
+	current_health -= 10
+	health_updated.emit(current_health, MAX_HEALTH)
+
+	if current_health > 0:
+		SceneFader.respawn_fade()
+	else:
+		is_respawning = false # Unlock flag before calling die
+		_die()
+
+func _handle_respawn_sequence():
+	respawn()
+	animated_sprite.visible = false
+	await get_tree().create_timer(respawn_sprite_delay).timeout
+	animated_sprite.visible = true
+	is_respawning = false
+
+func respawn():
+	global_position = Global.current_checkpoint_position
+	velocity = Vector2.ZERO
+	is_knocked_back = false
+	if is_grappling or is_needle_out: _release_grapple()
+	print("Player respawned at ", global_position)
+
+# --- GRAPPLE FUNCTIONS ---
 func _perform_grapple_jump():
 	_release_grapple()
 	velocity.y = JUMP_VELOCITY
@@ -152,8 +184,7 @@ func _perform_grapple_jump():
 	jump_buffer_timer = 0.0
 
 func _launch_needle():
-	if not grapple_needle_scene or is_needle_out or _is_grapple_on_cooldown:
-		return
+	if not grapple_needle_scene or is_needle_out or _is_grapple_on_cooldown: return
 	_is_grapple_on_cooldown = true
 	get_tree().create_timer(grapple_cooldown).timeout.connect(_end_grapple_cooldown)
 	is_needle_out = true
@@ -175,11 +206,9 @@ func _release_grapple():
 	is_grappling = false
 	is_needle_out = false
 	grapple_rope.clear_points()
-	if is_instance_valid(needle_instance):
-		needle_instance.queue_free()
+	if is_instance_valid(needle_instance): needle_instance.queue_free()
 	needle_instance = null
-	if velocity.y > 0:
-		velocity.y = 0
+	if velocity.y > 0: velocity.y = 0
 
 func _update_grapple_rope():
 	if is_needle_out or is_grappling:
@@ -191,11 +220,10 @@ func _update_grapple_rope():
 			grapple_rope.clear_points()
 			grapple_rope.add_point(Vector2.ZERO)
 			grapple_rope.add_point(grapple_point - global_position)
-		else:
-			grapple_rope.clear_points()
-	else:
-		grapple_rope.clear_points()
+		else: grapple_rope.clear_points()
+	else: grapple_rope.clear_points()
 
+# --- ATTACK FUNCTIONS ---
 func _play_attack_sound():
 	if attack_sound_player:
 		attack_sound_player.pitch_scale = randf_range(0.9, 1.1)
@@ -261,8 +289,12 @@ func _on_attack_effect_hit_enemy(enemy_node: Node, attack_type: String, from_gra
 		if attack_type == "down": velocity.y = JUMP_VELOCITY * BOUNCE_VELOCITY_MULTIPLIER
 		elif attack_type == "up": velocity.y = 0
 
+# --- DAMAGE & HEALTH FUNCTIONS ---
+
 func take_damage(amount: int, source_position: Vector2):
+	"""This is for COMBAT damage and respects invincibility frames."""
 	if is_invincible: return
+
 	if is_grappling or is_needle_out: _release_grapple()
 	_trigger_hit_effects()
 	_spawn_blood_splatter(player_hit_splat_count, Color.RED, global_position)
@@ -300,13 +332,14 @@ func _end_knockback():
 	update_animations()
 
 func _die():
+	is_respawning = false
 	print("Player has been defeated!")
 	_spawn_blood_splatter(player_hit_splat_count * 2, Color.CRIMSON, global_position)
 	set_physics_process(false) 
 	health_updated.emit(0, MAX_HEALTH)
-	# You might want to reload the scene or go to a game over screen here
-	# For now, it just removes the player
 	queue_free()
+
+# --- EFFECTS & ANIMATION ---
 
 func _trigger_hit_effects():
 	var camera = get_tree().get_first_node_in_group("camera")
@@ -315,7 +348,8 @@ func _trigger_hit_effects():
 		var tween = get_tree().create_tween().set_ignore_time_scale(true)
 		tween.tween_property(camera, "zoom", original_zoom * hit_zoom_amount, hit_zoom_duration / 2.0).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		tween.tween_property(camera, "zoom", original_zoom, hit_zoom_duration / 2.0).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	if hit_stop_duration > 0:
+		
+	if hit_stop_duration > 0 and not is_respawning:
 		Engine.time_scale = 0.001
 		var hit_stop_timer = get_tree().create_timer(hit_stop_duration, false, false, true)
 		hit_stop_timer.timeout.connect(func(): Engine.time_scale = 1.0)

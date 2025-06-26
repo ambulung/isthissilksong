@@ -1,0 +1,387 @@
+[gd_scene load_steps=12 format=3 uid="uid://bgf7tuxs4nxi2"]
+
+[ext_resource type="PackedScene" uid="uid://c5038qhdsrim6" path="res://scene/blood_effect.tscn" id="2_gxw85"]
+[ext_resource type="PackedScene" uid="uid://cwyp0ccaaeikt" path="res://scene/damage_text.tscn" id="3_0dywd"]
+[ext_resource type="PackedScene" uid="uid://nuefwlvd5ltx" path="res://scene/OneShotAudio.tscn" id="4_c28t0"]
+[ext_resource type="AudioStream" uid="uid://csdpx8j0a60b5" path="res://audio/hit.mp3" id="5_xc4hx"]
+[ext_resource type="Texture2D" uid="uid://d1k0rnp53q86" path="res://character/Enemy/bug2.png" id="6_babfl"]
+
+[sub_resource type="GDScript" id="GDScript_11wac"]
+script/source = "extends CharacterBody2D
+
+@export var MAX_HEALTH: int = 60
+@export var enemy_damage: int = 12
+
+@export var blood_effect_scene: PackedScene
+@export var damage_text_scene: PackedScene
+
+@export_group(\"Audio\")
+@export var one_shot_audio_scene: PackedScene
+@export var hit_sound: AudioStream
+@export var death_sound: AudioStream
+
+@export_group(\"Blood Splatter Settings\")
+@export var hit_splat_count: int = 8
+@export var death_splat_count_1: int = 25
+@export var death_splat_count_2: int = 15
+@export var death_splat_delay: float = 0.1
+
+@export_group(\"Tiktik Movement\")
+@export var crawl_speed: float = 100.0
+@export var wall_stick_force: float = 300.0
+@export var surface_detection_distance: float = 12.0
+@export var corner_lookahead_distance: float = 25.0
+@export var rotation_speed: float = 12.0
+@export var max_slope_angle: float = 85.0  # Can climb very steep surfaces
+
+@export_group(\"Enemy Damage & Invulnerability\")
+@export var INVINCIBILITY_DURATION_ENEMY: float = 0.3
+@export var KNOCKBACK_FORCE: float = 180.0
+@export var KNOCKBACK_DURATION_ENEMY: float = 0.25
+@export var enemy_weight: float = 0.6
+
+var current_health: int
+var is_invincible: bool = false
+var is_knocked_back: bool = false
+var move_direction: Vector2 = Vector2.RIGHT
+var surface_up_direction: Vector2 = Vector2.UP  # Renamed from up_direction
+var is_on_wall: bool = false
+
+@onready var animated_sprite: AnimatedSprite2D = $AnimatedSprite2D
+@onready var damage_zone: Area2D = $DamageZone
+
+func _ready():
+	current_health = MAX_HEALTH
+	damage_zone.body_entered.connect(_on_damage_zone_body_entered)
+	
+	# Debug: Print initial setup
+	print(\"Tiktik enemy ready!\")
+	print(\"Position: \", global_position)
+	print(\"Collision mask: \", collision_mask)
+	print(\"Collision layer: \", collision_layer)
+	
+	# Start walking animation
+	if animated_sprite:
+		animated_sprite.play(\"walk\")
+
+func _physics_process(delta: float):
+	if is_knocked_back:
+		velocity.y += 980 * delta  # Regular gravity during knockback
+		move_and_slide()
+		return
+
+	_stick_to_surface(delta)
+	_handle_surface_movement(delta)
+	move_and_slide()
+	_update_rotation(delta)
+	_update_animations()
+	
+	# Debug output (remove after fixing)
+	if Engine.get_process_frames() % 60 == 0:  # Print every second
+		print(\"Debug - Position: \", global_position, \" Velocity: \", velocity, \" On wall: \", is_on_wall, \" Move dir: \", move_direction)
+
+func _stick_to_surface(delta: float):
+	var space_state = get_world_2d().direct_space_state
+	
+	# Cast ray downward relative to current orientation
+	var down_ray = PhysicsRayQueryParameters2D.create(
+		global_position,
+		global_position - surface_up_direction * surface_detection_distance
+	)
+	down_ray.collision_mask = 1  # Make sure this matches your tilemap/ground layer
+	var surface_hit = space_state.intersect_ray(down_ray)
+	
+	# Debug: Uncomment to see ray casting
+	# print(\"Ray from: \", global_position, \" to: \", global_position - surface_up_direction * surface_detection_distance)
+	# print(\"Surface hit: \", surface_hit)
+	
+	if surface_hit:
+		# Found surface, stick to it
+		var surface_normal = surface_hit.normal
+		var distance_to_surface = global_position.distance_to(surface_hit.position)
+		
+		# Update orientation based on surface
+		surface_up_direction = surface_normal
+		
+		# Calculate right direction (perpendicular to surface normal)
+		var new_right = Vector2(-surface_normal.y, surface_normal.x)
+		
+		# Maintain movement direction consistency
+		if move_direction.dot(new_right) < 0:
+			move_direction = -new_right
+		else:
+			move_direction = new_right
+		
+		# Apply stick force to stay on surface
+		if distance_to_surface > 2.0:
+			velocity += surface_normal * wall_stick_force * delta
+		
+		is_on_wall = true
+	else:
+		# No surface found, fall with gravity
+		velocity.y += 980 * delta
+		is_on_wall = false
+		surface_up_direction = Vector2.UP
+		move_direction = Vector2.RIGHT if move_direction.x > 0 else Vector2.LEFT
+
+func _handle_surface_movement(delta: float):
+	if not is_on_wall:
+		return
+	
+	# Check if we can continue moving forward
+	var can_continue = _can_move_forward()
+	
+	if can_continue:
+		# Move along surface
+		velocity = move_direction * crawl_speed
+	else:
+		# Hit obstacle or edge, turn around
+		move_direction *= -1
+		velocity = move_direction * crawl_speed
+
+func _can_move_forward() -> bool:
+	var space_state = get_world_2d().direct_space_state
+	
+	# Check for obstacle directly ahead
+	var forward_obstacle_ray = PhysicsRayQueryParameters2D.create(
+		global_position,
+		global_position + move_direction * corner_lookahead_distance
+	)
+	forward_obstacle_ray.collision_mask = 1
+	var obstacle_hit = space_state.intersect_ray(forward_obstacle_ray)
+	
+	if obstacle_hit and global_position.distance_to(obstacle_hit.position) < corner_lookahead_distance * 0.7:
+		return false  # Obstacle in the way
+	
+	# Check if there's still surface to walk on ahead
+	var forward_pos = global_position + move_direction * corner_lookahead_distance
+	var surface_check_ray = PhysicsRayQueryParameters2D.create(
+		forward_pos,
+		forward_pos - surface_up_direction * surface_detection_distance * 1.5
+	)
+	surface_check_ray.collision_mask = 1
+	var surface_ahead = space_state.intersect_ray(surface_check_ray)
+	
+	if not surface_ahead:
+		# Check around corners - look for surfaces at an angle
+		var corner_directions = [
+			surface_up_direction.rotated(PI/4),
+			surface_up_direction.rotated(-PI/4),
+			-move_direction
+		]
+		
+		for corner_dir in corner_directions:
+			var corner_ray = PhysicsRayQueryParameters2D.create(
+				forward_pos,
+				forward_pos + corner_dir * surface_detection_distance
+			)
+			corner_ray.collision_mask = 1
+			var corner_hit = space_state.intersect_ray(corner_ray)
+			
+			if corner_hit:
+				return true  # Found surface around corner
+		
+		return false  # No surface ahead or around corners
+	
+	return true  # Surface continues ahead
+
+func _update_rotation(delta: float):
+	if not animated_sprite or not is_on_wall:
+		return
+	
+	# Calculate target rotation based on surface up direction
+	var target_rotation = surface_up_direction.angle() - PI/2
+	
+	# Smoothly rotate to match surface
+	rotation = lerp_angle(rotation, target_rotation, rotation_speed * delta)
+	
+	# Flip sprite based on movement direction
+	var sprite_should_flip = false
+	match int(round(target_rotation / (PI/2))):
+		0: # Floor
+			sprite_should_flip = move_direction.x < 0
+		1: # Right wall  
+			sprite_should_flip = move_direction.y < 0
+		2, -2: # Ceiling
+			sprite_should_flip = move_direction.x > 0
+		-1: # Left wall
+			sprite_should_flip = move_direction.y > 0
+	
+	animated_sprite.flip_h = sprite_should_flip
+
+func _on_damage_zone_body_entered(body: Node):
+	if body.is_in_group(\"player\") and not is_knocked_back:
+		if body.has_method(\"take_damage\"):
+			body.take_damage(enemy_damage, global_position)
+
+func take_damage(amount: int, source_position: Vector2 = Vector2.INF):
+	if is_invincible:
+		return
+	
+	_spawn_damage_text(amount)
+	_play_one_shot_sound(hit_sound, 0.9, 1.3)
+	current_health -= amount
+	
+	if current_health <= 0:
+		_die()
+		return
+		
+	_spawn_blood_splatter(hit_splat_count, Color.RED, global_position)
+	_start_invincibility()
+	
+	if source_position != Vector2.INF:
+		_start_knockback(source_position)
+
+func _spawn_damage_text(damage_amount: int):
+	if not damage_text_scene:
+		return
+		
+	var text_instance = damage_text_scene.instantiate() as Node2D
+	get_tree().current_scene.add_child(text_instance)
+	
+	var random_offset = Vector2(randf_range(-15, 15), randf_range(-25, -15))
+	text_instance.global_position = global_position + random_offset
+	
+	if text_instance.has_method(\"show_damage\"):
+		text_instance.show_damage(damage_amount)
+
+func _start_knockback(source_position: Vector2):
+	is_knocked_back = true
+	is_on_wall = false
+	
+	var knockback_direction = (global_position - source_position).normalized()
+	velocity = knockback_direction * (KNOCKBACK_FORCE / max(0.1, enemy_weight))
+	
+	# Reset orientation during knockback
+	surface_up_direction = Vector2.UP
+	rotation = 0
+	
+	get_tree().create_timer(KNOCKBACK_DURATION_ENEMY).timeout.connect(_end_knockback)
+
+func _end_knockback():
+	is_knocked_back = false
+
+func _spawn_blood_splatter(count: int, color: Color, position: Vector2):
+	if not blood_effect_scene:
+		return
+	var blood_instance = blood_effect_scene.instantiate() as GPUParticles2D
+	get_parent().add_child(blood_instance)
+	blood_instance.global_position = position
+	if blood_instance.has_method(\"setup_and_fire\"):
+		blood_instance.setup_and_fire(count, color)
+
+func _play_one_shot_sound(sound_stream: AudioStream, min_pitch: float = 0.9, max_pitch: float = 1.1):
+	if not one_shot_audio_scene or not sound_stream:
+		return
+	var audio_instance = one_shot_audio_scene.instantiate() as AudioStreamPlayer2D
+	get_parent().add_child(audio_instance)
+	audio_instance.global_position = global_position
+	audio_instance.fire(sound_stream, randf_range(min_pitch, max_pitch))
+
+func _die():
+	_play_one_shot_sound(death_sound, 0.8, 1.0)
+	_spawn_blood_splatter(death_splat_count_1, Color.CRIMSON, global_position)
+	var timer = get_tree().create_timer(death_splat_delay)
+	timer.timeout.connect(func(): _spawn_blood_splatter(death_splat_count_2, Color.DARK_RED, global_position))
+
+	hide()
+	set_process(false)
+	set_physics_process(false)
+
+	if has_node(\"CollisionShape2D\"):
+		$CollisionShape2D.set_deferred(\"disabled\", true)
+
+	if damage_zone.has_node(\"CollisionShape2D\"):
+		damage_zone.get_node(\"CollisionShape2D\").set_deferred(\"disabled\", true)
+
+	if damage_zone.body_entered.is_connected(_on_damage_zone_body_entered):
+		damage_zone.body_entered.disconnect(_on_damage_zone_body_entered)
+
+	get_tree().create_timer(0.5).timeout.connect(queue_free)
+
+func _start_invincibility():
+	is_invincible = true
+	set_collision_mask_value(4, false)
+	if animated_sprite:
+		var tween = create_tween()
+		tween.set_loops(int(INVINCIBILITY_DURATION_ENEMY * 15))
+		tween.tween_property(animated_sprite, \"modulate\", Color(1, 1, 1, 0.2), 0.033)
+		tween.tween_property(animated_sprite, \"modulate\", Color(1, 1, 1, 1.0), 0.033)
+		tween.finished.connect(_end_invincibility)
+	else:
+		get_tree().create_timer(INVINCIBILITY_DURATION_ENEMY).timeout.connect(_end_invincibility)
+
+func _end_invincibility():
+	is_invincible = false
+	set_collision_mask_value(4, true)
+	if animated_sprite:
+		animated_sprite.modulate = Color(1, 1, 1, 1)
+
+func _update_animations():
+	if not animated_sprite:
+		return
+	
+	if animated_sprite.animation != \"walk\":
+		animated_sprite.play(\"walk\")
+"
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_gxw85"]
+atlas = ExtResource("6_babfl")
+region = Rect2(0, 0, 16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_0dywd"]
+atlas = ExtResource("6_babfl")
+region = Rect2(16, 0, 16, 16)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_c28t0"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_gxw85")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_0dywd")
+}],
+"loop": true,
+"name": &"walk",
+"speed": 5.0
+}]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_b7koy"]
+radius = 8.0
+height = 20.0
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_yvcfn"]
+radius = 9.0
+height = 24.0
+
+[node name="EnemyWall" type="CharacterBody2D" groups=["enemy"]]
+collision_layer = 4
+collision_mask = 11
+wall_min_slide_angle = 0.602139
+script = SubResource("GDScript_11wac")
+blood_effect_scene = ExtResource("2_gxw85")
+damage_text_scene = ExtResource("3_0dywd")
+one_shot_audio_scene = ExtResource("4_c28t0")
+hit_sound = ExtResource("5_xc4hx")
+death_sound = ExtResource("5_xc4hx")
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." groups=["enemy"]]
+texture_filter = 1
+position = Vector2(0, -1)
+scale = Vector2(1.5, 1.5)
+sprite_frames = SubResource("SpriteFrames_c28t0")
+animation = &"walk"
+frame_progress = 0.846702
+speed_scale = 1.2
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(1, 1)
+shape = SubResource("CapsuleShape2D_b7koy")
+
+[node name="DamageZone" type="Area2D" parent="."]
+collision_layer = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="DamageZone"]
+position = Vector2(1, 0)
+shape = SubResource("CapsuleShape2D_yvcfn")

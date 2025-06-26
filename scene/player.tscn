@@ -1,4 +1,4 @@
-[gd_scene load_steps=21 format=3 uid="uid://dt7fqvupclumi"]
+[gd_scene load_steps=22 format=3 uid="uid://dt7fqvupclumi"]
 
 [ext_resource type="Script" uid="uid://qcmvhdm2w6ur" path="res://script/player.gd" id="1_onrkg"]
 [ext_resource type="PackedScene" uid="uid://bf4mqagq8ov0n" path="res://scene/AttackEffect.tscn" id="2_fvtld"]
@@ -32,6 +32,10 @@ atlas = ExtResource("2_i3pqv")
 region = Rect2(48, 0, 16, 24)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_2fvbb"]
+atlas = ExtResource("2_i3pqv")
+region = Rect2(0, 0, 16, 24)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_ihjo1"]
 atlas = ExtResource("2_i3pqv")
 region = Rect2(0, 0, 16, 24)
 
@@ -106,6 +110,22 @@ animations = [{
 }, {
 "frames": [{
 "duration": 1.0,
+"texture": SubResource("AtlasTexture_ihjo1")
+}],
+"loop": true,
+"name": &"look_down",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_ihjo1")
+}],
+"loop": true,
+"name": &"look_up",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
 "texture": SubResource("AtlasTexture_oh5ij")
 }],
 "loop": false,
@@ -152,7 +172,7 @@ player_blood_effect_scene = ExtResource("3_s4jxa")
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
 texture_filter = 1
 sprite_frames = SubResource("SpriteFrames_nvl01")
-animation = &"fall"
+animation = &"look_down"
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 position = Vector2(0, 4)
@@ -174,4 +194,14 @@ collision_mask = 64
 position = Vector2(0, 3)
 shape = SubResource("CapsuleShape2D_oh5ij")
 
+[node name="LookUpTimer" type="Timer" parent="."]
+wait_time = 2.0
+one_shot = true
+
+[node name="LookDownTimer" type="Timer" parent="."]
+wait_time = 2.0
+one_shot = true
+
 [connection signal="body_entered" from="HazardDetector" to="." method="_on_hazard_detector_body_entered"]
+[connection signal="timeout" from="LookUpTimer" to="." method="_on_look_up_timer_timeout"]
+[connection signal="timeout" from="LookDownTimer" to="." method="_on_look_down_timer_timeout"]
